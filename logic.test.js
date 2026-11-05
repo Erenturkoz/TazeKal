@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');const {remaining,effective,number,message}=require('./logic');
+const p={name:'Süt',expiry:'2026-10-26',opened:'',afterDays:3};
+assert.equal(remaining(p,'2026-10-23'),3);
+assert.equal(remaining(p,'2026-10-24'),2);
+assert.equal(remaining(p,'2026-10-25'),1);
+assert.equal(remaining(p,'2026-10-26'),0);
+assert.equal(remaining(p,'2026-10-27'),-1);
+assert.equal(effective({...p,opened:'2026-10-20'}),number('2026-10-23'));
+assert.equal(effective({...p,opened:'2026-10-25'}),number('2026-10-26'));
+assert.equal(remaining({expiry:'2027-01-01'},'2026-12-31'),1);
+assert.equal(remaining({expiry:'2028-03-01'},'2028-02-28'),2);
+assert.match(message(p,-1),/bozulmuş olabilir/);
+console.log('10 tarih ve hatırlatma kontrolü başarılı.');
