@@ -10,6 +10,7 @@ const { AppModule, configureHttp } = require('../dist/app.module');
 const { DATABASE } = require('../dist/store');
 const { SETTINGS, GoogleVerifier } = require('../dist/google');
 const { hashPassword, checkPassword } = require('../dist/crypto');
+const { TERMS_VERSION } = require('../dist/auth.service');
 
 async function setup(t) {
   let pool, admin, schema;
@@ -38,7 +39,7 @@ async function setup(t) {
   const app = module.createNestApplication(); configureHttp(app); await app.init();
   t.after(async () => { await app.close(); if (admin) { await admin.query('DROP SCHEMA ' + schema + ' CASCADE'); await admin.end(); } });
   const api = request(app.getHttpServer());
-  const register = async (email = 'eren@example.com') => (await api.post('/v1/auth/register').send({ email, displayName: 'Eren', password: 'a-strong-password' }).expect(201)).body;
+  const register = async (email = 'eren@example.com') => (await api.post('/v1/auth/register').send({ email, displayName: 'Eren', password: 'a-strong-password', acceptedTermsVersion: TERMS_VERSION }).expect(201)).body;
   return { api, pool, identities, register };
 }
 test('Password hashes have distinct salts and reject wrong passwords', async () => {
@@ -76,7 +77,7 @@ test('Validation and user isolation prevent changing someone else’s profile', 
   const other = await api.get('/v1/users/me').auth(b.accessToken, { type: 'bearer' }).expect(200);
   assert.equal(other.body.displayName, 'Eren');
   await api.post('/v1/auth/register').send({ email: 'bad', displayName: 'A', password: 'weak' }).expect(400);
-  await api.post('/v1/auth/register').send({ email: 'eren@example.com', displayName: 'Eren', password: 'a-strong-password' }).expect(409);
+  await api.post('/v1/auth/register').send({ email: 'eren@example.com', displayName: 'Eren', password: 'a-strong-password', acceptedTermsVersion: TERMS_VERSION }).expect(409);
 });
 test('Google identity is server-verified and linking requires an existing authenticated account', async t => {
   const { api, identities, register } = await setup(t);
@@ -95,7 +96,9 @@ test('Google identity is server-verified and linking requires an existing authen
 test('Google-only registration and wrong-email linking', async t => {
   const { api, identities, register } = await setup(t);
   identities.set('another-valid-google-id-token', { sub: 'another-sub', email: 'another@example.com', name: 'Another' });
-  const created = await api.post('/v1/auth/google').send({ idToken: 'another-valid-google-id-token' }).expect(200);
+  await api.post('/v1/auth/google').send({ idToken: 'another-valid-google-id-token' }).expect(400);
+  const created = await api.post('/v1/auth/google').send({ idToken: 'another-valid-google-id-token', acceptedTermsVersion: TERMS_VERSION }).expect(200);
+  assert.equal(created.body.user.termsVersion, TERMS_VERSION);
   assert.deepEqual(created.body.user.providers, ['google']);
   const local = await register();
   await api.post('/v1/auth/google/link').auth(local.accessToken, { type: 'bearer' }).send({ idToken: 'another-valid-google-id-token' }).expect(409);
@@ -104,4 +107,56 @@ test('Login brute-force attempts are throttled', async t => {
   const { api } = await setup(t);
   for (let i = 0; i < 5; i++) await api.post('/v1/auth/login').send({ email: 'none@example.com', password: 'wrong-password' }).expect(401);
   await api.post('/v1/auth/login').send({ email: 'none@example.com', password: 'wrong-password' }).expect(429);
+});
+
+test('Registration requires accepting the current Terms of Use and stores the accepted version', async t => {
+  const { api, pool } = await setup(t);
+  const body = { email: 'terms@example.com', displayName: 'Eren', password: 'a-strong-password' };
+  await api.post('/v1/auth/register').send(body).expect(400);
+  await api.post('/v1/auth/register').send({ ...body, acceptedTermsVersion: '2000-01-01' }).expect(400);
+  await api.post('/v1/auth/register').send({ ...body, acceptedTermsVersion: true }).expect(400);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM users')).rows[0].n, 0);
+  const created = await api.post('/v1/auth/register').send({ ...body, acceptedTermsVersion: TERMS_VERSION }).expect(201);
+  assert.equal(created.body.user.termsVersion, TERMS_VERSION);
+  const row = (await pool.query('SELECT terms_version, terms_accepted_at FROM users')).rows[0];
+  assert.equal(row.terms_version, TERMS_VERSION); assert.ok(row.terms_accepted_at);
+});
+test('Account deletion requires the password, revokes every session and erases the user’s data only', async t => {
+  const { api, pool, register } = await setup(t);
+  const a = await register('delete-me@example.com'), b = await register('keep-me@example.com');
+  const second = (await api.post('/v1/auth/login').send({ email: 'delete-me@example.com', password: 'a-strong-password' }).expect(200)).body;
+  const product = { id: 'milk', name: 'Süt', quantity: '1 L', location: 'Buzdolabı', purchased_at: '2026-11-16', expires_at: '2026-11-20', opened_at: null, after_opening_days: null, status: 'active', opening_profile_id: 'milk_uht_v1', cold_storage_confirmed: 1 };
+  for (const s of [a, b]) {
+    await api.post('/v1/products/sync').auth(s.accessToken, { type: 'bearer' })
+      .send({ mutations: [{ mutationId: randomUUID(), productId: 'milk', baseVersion: 0, deleted: false, product }] }).expect(201);
+  }
+  await api.delete('/v1/users/me').send({ password: 'a-strong-password' }).expect(401);
+  await api.delete('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).send({}).expect(403);
+  await api.delete('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).send({ password: 'wrong-password' }).expect(403);
+  await api.delete('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).send({ password: 'a-strong-password', userId: b.user.id }).expect(400);
+  await api.get('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).expect(200);
+  await api.delete('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).send({ password: 'a-strong-password' }).expect(204);
+  await api.get('/v1/users/me').auth(a.accessToken, { type: 'bearer' }).expect(401);
+  await api.get('/v1/users/me').auth(second.accessToken, { type: 'bearer' }).expect(401);
+  await api.post('/v1/auth/refresh').send({ refreshToken: second.refreshToken }).expect(401);
+  await api.post('/v1/auth/login').send({ email: 'delete-me@example.com', password: 'a-strong-password' }).expect(401);
+  for (const table of ['users', 'sessions', 'user_products', 'product_mutations', 'product_sync_heads']) {
+    const column = table === 'users' ? 'id' : 'user_id';
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${column}=$1`, [a.user.id])).rows[0].n, 0, table);
+  }
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM user_products WHERE user_id=$1', [b.user.id])).rows[0].n, 1);
+  await api.get('/v1/users/me').auth(b.accessToken, { type: 'bearer' }).expect(200);
+  // The e-mail address is free again after deletion.
+  await register('delete-me@example.com');
+});
+test('Google-only accounts confirm deletion with a fresh token for the same Google identity', async t => {
+  const { api, pool, identities } = await setup(t);
+  identities.set('google-owner-token-for-deletion', { sub: 'owner-sub', email: 'owner@example.com', name: 'Owner' });
+  identities.set('google-other-token-for-deletion', { sub: 'other-sub', email: 'other@example.com', name: 'Other' });
+  const owner = (await api.post('/v1/auth/google').send({ idToken: 'google-owner-token-for-deletion', acceptedTermsVersion: TERMS_VERSION }).expect(200)).body;
+  await api.delete('/v1/users/me').auth(owner.accessToken, { type: 'bearer' }).send({ password: 'anything' }).expect(403);
+  await api.delete('/v1/users/me').auth(owner.accessToken, { type: 'bearer' }).send({ idToken: 'invalid-google-token-for-deletion' }).expect(403);
+  await api.delete('/v1/users/me').auth(owner.accessToken, { type: 'bearer' }).send({ idToken: 'google-other-token-for-deletion' }).expect(403);
+  await api.delete('/v1/users/me').auth(owner.accessToken, { type: 'bearer' }).send({ idToken: 'google-owner-token-for-deletion' }).expect(204);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM users')).rows[0].n, 0);
 });

@@ -17,7 +17,7 @@ docker compose --env-file .env.production -f compose.production.yaml ps
 Invoke-RestMethod http://localhost:3000/v1/health/ready
 ```
 
-`status=ok`, `database=ready`, `schemaVersion=2` beklenir. `/v1/health` yalnız süreç kontrolüdür. API veritabanının sağlıklı olmasını bekler; açılırken migration'ı transaction ve PostgreSQL kilidiyle uygular. API root kullanıcısı olmadan, salt okunur dosya sistemiyle çalışır. Bağımlılık kilit dosyası imajda kullanılır. [Compose başlangıç sırası](https://docs.docker.com/compose/how-tos/startup-order/) sağlık bağımlılığını açıklar.
+`status=ok`, `database=ready`, `schemaVersion=3` beklenir. `/v1/health` yalnız süreç kontrolüdür. API veritabanının sağlıklı olmasını bekler; açılırken migration'ı transaction ve PostgreSQL kilidiyle uygular. API root kullanıcısı olmadan, salt okunur dosya sistemiyle çalışır. Bağımlılık kilit dosyası imajda kullanılır. [Compose başlangıç sırası](https://docs.docker.com/compose/how-tos/startup-order/) sağlık bağımlılığını açıklar.
 
 Terminal kapansa da `-d` ile başlayan servisler çalışır. Docker Engine açıldığında `unless-stopped` ilkesiyle yeniden başlar; bilgisayar kapalıyken hizmet sunulmaz.
 

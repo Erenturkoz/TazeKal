@@ -28,7 +28,7 @@ Flutter ile Android/iOS için mutfak envanteri ve tüketim tarihi takibi. Node.j
 - Ana stoktan ayrılmış Geçmiş → Tarihi geçenler / Tüketilenler; tarihi geçenler için küçük sekme sayacı.
 - Hesaba bağlı PostgreSQL ürünleri, kalıcı çevrimdışı değişiklik kuyruğu, sürüm çakışmalarını inceleyerek çözme ve ürün/fiş taslakları. [Eşitleme sözleşmesi](docs/SYNC.md).
 - API ve PostgreSQL için [taşınabilir Docker kurulumu](docs/DOCKER.md), otomatik migration ve veritabanı hazırlık kontrolü.
-- **E-posta doğrulama gönderimi, parola sıfırlama ve hesap silme henüz eklenmedi.** [Yayın öncesi kalan işler](docs/RELEASE.md). Google girişi, proje sahibinin yerel Android kurulumunda 25 Ekim 2026'da kullanıcı tarafından doğrulandı; her geliştirici kendi istemci/imza yapılandırmasını yapmalıdır. Gerçek fiş OCR doğruluğu ayrıca cihazda denenmelidir.
+- **E-posta doğrulama gönderimi ve parola sıfırlama henüz eklenmedi.** Hesap silme (Profilim → Hesabımı sil) ve taslak Kullanım Koşulları/Gizlilik Politikası eklendi. [Yayın öncesi kalan işler](docs/RELEASE.md). Google girişi, proje sahibinin yerel Android kurulumunda 25 Ekim 2026'da kullanıcı tarafından doğrulandı; her geliştirici kendi istemci/imza yapılandırmasını yapmalıdır. Gerçek fiş OCR doğruluğu ayrıca cihazda denenmelidir.
 
 ## Geliştirme kontrolleri
 

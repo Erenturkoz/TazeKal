@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../legal/legal_texts.dart';
 import 'auth_api.dart';
 import 'google_identity.dart';
 import 'session_vault.dart';
@@ -240,6 +241,7 @@ class AuthController extends ChangeNotifier {
           'displayName': name.trim(),
           'email': email.trim(),
           'password': password,
+          'acceptedTermsVersion': termsVersion,
         },
       ),
       epoch,
@@ -264,7 +266,12 @@ class AuthController extends ChangeNotifier {
     _ensure(epoch);
     if (token == null) return;
     await _accept(
-      await api.call('POST', '/auth/google', body: {'idToken': token}),
+      await api.call(
+        'POST',
+        '/auth/google',
+        // Only used by the server when this Google sign-in creates a new account.
+        body: {'idToken': token, 'acceptedTermsVersion': termsVersion},
+      ),
       epoch,
     );
   }
@@ -421,6 +428,35 @@ class AuthController extends ChangeNotifier {
       // An already rejected session need not trap the user on the profile page.
       if (e.status != 401) rethrow;
     }
+    if (epoch == _epoch) {
+      await _forget(epoch);
+    } else if (user != null) {
+      throw AuthApi.cancelledFailure;
+    }
+  }
+
+  /// Permanently deletes the account on the server, then clears this device's session.
+  /// Password accounts confirm with [password]; Google-only accounts re-authenticate
+  /// with Google. Throws [AuthApi.cancelledFailure] if the Google prompt is dismissed.
+  Future<void> deleteAccount({String? password}) async {
+    final current = user;
+    if (current == null) {
+      throw const ApiFailure('Tekrar giriş yapmalısın.', 401);
+    }
+    final epoch = _epoch;
+    final Map<String, dynamic> body;
+    if (current.providers.contains('password')) {
+      if (password == null || password.isEmpty) {
+        throw const ApiFailure('Hesabını silmek için şifreni gir.');
+      }
+      body = {'password': password};
+    } else {
+      final token = await google.idToken();
+      _ensure(epoch);
+      if (token == null) throw AuthApi.cancelledFailure;
+      body = {'idToken': token};
+    }
+    await authenticated('DELETE', '/users/me', body: body);
     if (epoch == _epoch) {
       await _forget(epoch);
     } else if (user != null) {

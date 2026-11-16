@@ -11,7 +11,7 @@ async function main() {
     await client.query('SELECT pg_advisory_xact_lock(7450621)');
     await client.query(readFileSync(join(process.cwd(), 'src/schema.sql'), 'utf8'));
     await client.query('COMMIT');
-    console.log('Database schema version 2 applied.');
+    console.log('Database schema version 3 applied.');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); await pool.end(); }
 }

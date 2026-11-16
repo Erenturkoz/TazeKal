@@ -42,3 +42,8 @@ CREATE TABLE IF NOT EXISTS product_mutations (
   PRIMARY KEY (user_id,mutation_id)
 );
 INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING;
+
+-- v3: Terms of Use / Privacy Policy acceptance (account deletion uses the existing ON DELETE CASCADE keys).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_version varchar(20);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at timestamptz;
+INSERT INTO schema_migrations(version) VALUES (3) ON CONFLICT DO NOTHING;
