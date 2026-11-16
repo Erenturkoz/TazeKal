@@ -17,6 +17,12 @@ Betik yerel yapılandırmayı otomatik kullanır, en az 1 GB emülatör boş ala
 
 Kayıt, giriş, profil adı düzenleme ve çıkış eklendi. Ana ekranın sağ üstündeki profil simgesi hesabı açar; profil ekranının sabit alt bölümündeki **Çıkış yap** düğmesi kaydırmadan erişilebilir. Başarılı çıkış giriş ekranına döndürür ve cihazdaki ürünleri korur. Hesapsız kullanım korunur. Token'lar Keychain/Android güvenli depolama ile tek oturum kaydı olarak tutulur. Şifre cihazda saklanmaz. 401 yanıtında bir ortak refresh çağrısı yapılır; reddedilirse yerel oturum kaldırılır. Bağlantı kesildiğinde önceden kaydedilmiş kimlikle cihazdaki ürünlere erişim devam eder; bu, sunucuda yeni yetki vermez.
 
+## Kullanım koşulları ve hesap silme
+
+Kayıt formunda Kullanım Koşulları ve Gizlilik Politikası onay kutusu işaretlenmeden hesap oluşturulmaz; Google düğmesinin altında yeni hesapta koşulların kabul edileceği yazar. Metinler giriş ekranından ve Profilim → Yasal bölümünden açılır. Metinler taslaktır; yayından önce hukuken incelenmelidir.
+
+Profilim → **Hesabımı sil**: uyarı, geri alınamaz onay kutusu ve şifre (yalnız Google hesabında Google ile yeniden doğrulama) ister. Sunucu silmeyi onaylayınca cihaz oturumu kaldırılır, bu hesaba ait yerel ürünler, eşitleme kuyruğu ve hesap ayarları da silinir; misafir ürünlerine dokunulmaz. Bağlantı yoksa veya şifre yanlışsa hiçbir şey silinmez.
+
 ## Bağlantı ve çıkış
 
 Kayıtlı cihaz kimliği okununca mutfak sunucuyu beklemeden açılır; oturum arka planda doğrulanır. Normal **Çıkış yap** sunucu oturumunu iptal eder. Hizmete erişilemiyorsa açıklama/onayla **Yalnızca bu cihazdan çıkış yap** sunulur; ürünler korunur, bu seçenek uzak oturumu iptal etmiş sayılmaz. API istekleri toplam 12 saniye ile sınırlıdır; başarısız profil/kayıt yazıları kendiliğinden tekrar gönderilmez. [Ayrıntılı bağlantı davranışı](OFFLINE.md).

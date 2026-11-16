@@ -102,6 +102,25 @@ class _AccountGateState extends State<AccountGate> {
             if (profileContext.mounted) Navigator.pop(profileContext);
             if (mounted) setState(() => guestMode = false);
           },
+          onDeleteAccount: (password) async {
+            if (widget.auth.user?.id != owner) {
+              throw StateError('Account changed');
+            }
+            await widget.auth.deleteAccount(password: password);
+            try {
+              await widget.repository.deleteOwnerData(owner);
+            } catch (_) {
+              // The server account is already gone and the session cleared; the
+              // remaining local rows are owner-scoped and no longer reachable.
+            }
+            if (profileContext.mounted) Navigator.pop(profileContext);
+            if (mounted) {
+              setState(() => guestMode = false);
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                const SnackBar(content: Text('Hesabın ve verilerin silindi.')),
+              );
+            }
+          },
           onLocalLogout: () async {
             await widget.auth.logoutLocally();
             if (profileContext.mounted) Navigator.pop(profileContext);

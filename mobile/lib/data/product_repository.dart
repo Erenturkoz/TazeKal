@@ -27,6 +27,10 @@ abstract class AccountProductRepository implements ProductRepository {
   AccountProductRepository forOwner(String ownerId);
   Future<int> guestCount();
   Future<void> moveGuestTo(String ownerId);
+
+  /// Erases every local trace of a deleted account: products, pending sync
+  /// mutations, sync cursor and account-scoped settings. Guest data is never touched.
+  Future<void> deleteOwnerData(String ownerId);
 }
 
 class ProductChange {
@@ -221,6 +225,32 @@ class SqliteProductRepository implements AccountProductRepository {
     });
     events.changed('guest', local: true);
     events.changed(ownerId, local: true);
+  }
+
+  @override
+  Future<void> deleteOwnerData(String ownerId) async {
+    if (ownerId == 'guest' || ownerId.isEmpty) return;
+    await db.transaction((tx) async {
+      for (final table in [
+        'products',
+        'product_outbox',
+        'product_sync_state',
+      ]) {
+        await tx.delete(table, where: 'owner_id=?', whereArgs: [ownerId]);
+      }
+      // Escape LIKE wildcards so an id can never match another account's keys.
+      final prefix = 'account:$ownerId:'.replaceAllMapped(
+        RegExp(r'[\\%_]'),
+        (m) => '\\${m[0]}',
+      );
+      await tx.delete(
+        'settings',
+        where: "key LIKE ? ESCAPE '\\'",
+        whereArgs: ['$prefix%'],
+      );
+    });
+    // Not a local edit: nothing must be queued for sync after an account is erased.
+    events.changed(ownerId, local: false);
   }
 
   @override

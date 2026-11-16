@@ -24,7 +24,7 @@ npm run dev
 
 API `http://localhost:3000/v1` adresinde çalışır. Android emülatörü aynı sunucuya `http://10.0.2.2:3000/v1` ile ulaşır. `/v1/health` yalnız uygulamanın ayakta olduğunu belirtir; veritabanı sağlık kontrolü değildir.
 
-`/v1/health/ready` veritabanı bağlantısını ve şema v2'yi kontrol eder; hazır değilse 503 döner. Yeni ürün API'si için mevcut geliştirme veritabanında `npm run migrate` çalıştırılmalıdır; kayıtlar korunur. API + PostgreSQL'i terminalden bağımsız başlatmak için [taşınabilir Docker kurulumu](../docs/DOCKER.md) kullanılabilir. Bu kurulum ayrı veri alanıdır; geliştirme verilerini otomatik taşımaz.
+`/v1/health/ready` veritabanı bağlantısını ve şema v3'ü kontrol eder; hazır değilse 503 döner. Yeni ürün API'si için mevcut geliştirme veritabanında `npm run migrate` çalıştırılmalıdır; kayıtlar korunur. API + PostgreSQL'i terminalden bağımsız başlatmak için [taşınabilir Docker kurulumu](../docs/DOCKER.md) kullanılabilir. Bu kurulum ayrı veri alanıdır; geliştirme verilerini otomatik taşımaz.
 
 `npm run dev` terminali açık kaldığı sürece API çalışır; terminal kapanırsa bu adres de kapanır. Yeniden açarken yalnız `docker compose up -d db` ve `npm run dev` yeterlidir; `.env` dosyasını yeniden kopyalamayın. Docker Desktop'taki `backend` grubu şu an yalnız veritabanını içerir, Node API'yi başlatmaz.
 
@@ -36,20 +36,21 @@ Tüm gövdeler JSON. Korumalı çağrılarda `Authorization: Bearer <accessToken
 
 | Metot / yol | Gövde | Sonuç |
 |---|---|---|
-| POST `/auth/register` | `email`, `password`, `displayName` | Oturum + profil |
+| POST `/auth/register` | `email`, `password`, `displayName`, `acceptedTermsVersion` | Oturum + profil |
 | POST `/auth/login` | `email`, `password` | Oturum + profil |
-| POST `/auth/google` | `idToken` | Oturum + profil |
+| POST `/auth/google` | `idToken`, yeni hesapta `acceptedTermsVersion` | Oturum + profil |
 | POST `/auth/refresh` | `refreshToken` | Yenilenmiş iki token + profil |
 | POST `/auth/logout` | — | Mevcut oturum iptal, 204 |
 | POST `/auth/google/link` | `idToken` | Giriş yapılan profile aynı e-postalı Google hesabını bağlar |
 | GET `/users/me` | — | Kendi profilin |
 | PATCH `/users/me` | `displayName` | Güncel profil |
+| DELETE `/users/me` | Şifreli hesapta `password`, yalnız Google hesabında yeni `idToken` | Hesap ve tüm verisi kalıcı silinir, 204 |
 | POST `/products/sync` | `mutations` | Onaylar ve sürüm çakışmaları |
 | GET `/products/changes?after=0&limit=200` | — | Hesabın değişen ürünleri ve cursor |
 
 Ürün alanları ve kuyruk kuralları: [eşitleme sözleşmesi](../docs/SYNC.md).
 
-Ürün tarihi isteğe bağlıdır (`expires_at=null`). Yeni ürünlerde `expiry_source` (`label`, `estimated`, `unknown`) ve isteğe bağlı `shelf_life_profile_id` tahminin kaynağını korur. Eski istemcilerin metadata içermeyen tarihli ürünleri ve mutation tekrarları desteklenir. Alanlar JSON ürün gövdesinde tutulduğundan API PostgreSQL şema sürümü v2 olarak kalır.
+Ürün tarihi isteğe bağlıdır (`expires_at=null`). Yeni ürünlerde `expiry_source` (`label`, `estimated`, `unknown`) ve isteğe bağlı `shelf_life_profile_id` tahminin kaynağını korur. Eski istemcilerin metadata içermeyen tarihli ürünleri ve mutation tekrarları desteklenir. Bu alanlar JSON ürün gövdesinde tutulur; şema v3 yalnız koşul onayı sütunlarını ekler.
 
 Access token 15 dakika; refresh token 30 günlük mutlak oturum ömrü içinde döndürülür. Yenileme ömrü her kullanımda sınırsız uzatılmaz. Eski refresh token yeniden kullanılamaz. Çıkış sunucuda oturumu iptal ettiği için mevcut access token da geçersizleşir. Sunucu oturumunun iptalini doğrulamak için API erişimi gerekir. Mobilde bağlantı yokken ayrı onayla yalnız cihaz oturumu kaldırılabilir; bu işlem sunucudaki oturumu iptal etmez. [Mobil bağlantı ve çıkış davranışı](../docs/OFFLINE.md).
 
@@ -63,9 +64,15 @@ Google Cloud'da uygulamaya ait Android, Web ve gerekiyorsa iOS OAuth istemcileri
 
 Aynı e-postalı yerel hesap Google ile otomatik birleştirilmez. Kullanıcı önce mevcut hesabına giriş yapar, sonra Profilim ekranından aynı e-postalı Google hesabını bağlar.
 
+## Kullanım koşulları ve hesap silme
+
+Kayıt ve Google ile ilk hesap oluşturma, güncel koşul sürümünü (`TERMS_VERSION`, `src/auth.service.ts`) ister; sürüm eşleşmezse 400 döner. Kabul edilen sürüm ve zamanı `users.terms_version` / `users.terms_accepted_at` sütunlarında tutulur (şema v3). Mevcut kullanıcıların Google girişi etkilenmez. Metin değişince bu sabit ve `mobile/lib/legal/legal_texts.dart` içindeki `termsVersion` birlikte güncellenir.
+
+`DELETE /users/me` yeniden kimlik doğrulama ister: şifreli hesapta şifre, yalnız Google hesabında aynı Google kimliğine ait yeni ID token. Çalınmış bir access token tek başına hesabı silemez. Yanlış doğrulama 403 döner (401 değil; istemci oturumun bittiğini sanmaz). Başarılı silme kullanıcı satırını kaldırır; oturumlar, ürünler, eşitleme cursor'ı ve mutation kayıtları `ON DELETE CASCADE` ile aynı işlemde silinir, tüm cihazlardaki oturumlar anında geçersiz olur. Uç nokta dakikada 5 denemeyle sınırlıdır. Veritabanı yedeklerindeki kopyalar yedek saklama süresi dolunca temizlenir; bu süre gizlilik politikasında belirtilmelidir.
+
 ## Henüz tamamlanmayan hesap servisleri
 
-E-posta/şifre kaydında `emailVerified=false`. SMTP sağlayıcısı ve doğrulama/şifre sıfırlama akışı henüz yoktur; doğrulanmış gibi gösterilmez. Google hesabı doğrulanmış e-posta sağlar. Üretim yayını öncesinde e-posta doğrulama, parola sıfırlama, hesap/veri silme ve operasyonel izleme ayrıca tamamlanmalıdır.
+E-posta/şifre kaydında `emailVerified=false`. SMTP sağlayıcısı ve doğrulama/şifre sıfırlama akışı henüz yoktur; doğrulanmış gibi gösterilmez. Google hesabı doğrulanmış e-posta sağlar. Üretim yayını öncesinde e-posta doğrulama, parola sıfırlama ve operasyonel izleme ayrıca tamamlanmalıdır.
 
 API kimlik, profil ve hesaba özel ürünleri saklar. SQLite çevrimdışı erişim ve kalıcı kuyruk için korunur; ürünler sürüm kontrollü olarak PostgreSQL'e eşitlenir.
 

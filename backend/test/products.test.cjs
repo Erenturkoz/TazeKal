@@ -25,7 +25,7 @@ async function setup(t) {
   const app = module.createNestApplication(); configureHttp(app); await app.init();
   t.after(async () => { await app.close(); if (admin) { await admin.query('DROP SCHEMA ' + schema + ' CASCADE'); await admin.end(); } });
   const api = request(app.getHttpServer());
-  const account = async email => (await api.post('/v1/auth/register').send({ email, displayName: 'Test', password: 'a-strong-password' }).expect(201)).body;
+  const account = async email => (await api.post('/v1/auth/register').send({ email, displayName: 'Test', password: 'a-strong-password', acceptedTermsVersion: require('../dist/auth.service').TERMS_VERSION }).expect(201)).body;
   const push = (session, mutations) => api.post('/v1/products/sync').auth(session.accessToken, { type: 'bearer' }).send({ mutations });
   const pull = (session, after = 0, limit = 200) => api.get(`/v1/products/changes?after=${after}&limit=${limit}`).auth(session.accessToken, { type: 'bearer' });
   return { api, pool, account, push, pull };

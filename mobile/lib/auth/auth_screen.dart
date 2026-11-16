@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'auth_api.dart';
 import 'auth_controller.dart';
+import '../legal/legal_screen.dart';
+import '../legal/legal_texts.dart';
 import '../widgets/connection_status.dart';
 import '../widgets/loading_skeleton.dart';
 
@@ -17,7 +19,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final name = TextEditingController(),
       email = TextEditingController(),
       password = TextEditingController();
-  bool register = false, busy = false, hidden = true;
+  bool register = false, busy = false, hidden = true, acceptedTerms = false;
   String? error;
   @override
   void dispose() {
@@ -172,6 +174,67 @@ class _AuthScreenState extends State<AuthScreen> {
                             : null,
                         onFieldSubmitted: (_) => submit(),
                       ),
+                      if (register)
+                        FormField<bool>(
+                          key: ValueKey('terms-$acceptedTerms'),
+                          initialValue: acceptedTerms,
+                          validator: (_) => acceptedTerms
+                              ? null
+                              : 'Hesap oluşturmak için koşulları kabul etmelisin.',
+                          builder: (field) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Checkbox(
+                                    key: const Key('accept-terms'),
+                                    value: acceptedTerms,
+                                    onChanged: busy
+                                        ? null
+                                        : (v) => setState(
+                                            () => acceptedTerms = v ?? false,
+                                          ),
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Wrap(
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          _LegalLink(
+                                            'Kullanım Koşulları',
+                                            termsOfUse,
+                                          ),
+                                          const Text(' ve '),
+                                          _LegalLink(
+                                            'Gizlilik Politikası',
+                                            privacyPolicy,
+                                          ),
+                                          const Text(
+                                            '\'nı okudum, kabul ediyorum.',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (field.hasError)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 12),
+                                  child: Text(
+                                    field.errorText!,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.error,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       if (error != null)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -232,12 +295,20 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: Text('Google ile devam et'),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Google ile yeni hesap oluşturursan Kullanım Koşulları ve Gizlilik Politikası\'nı kabul etmiş olursun.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const LegalLinks(),
                       const SizedBox(height: 16),
                       TextButton(
                         onPressed: busy
                             ? null
                             : () => setState(() {
                                 register = !register;
+                                acceptedTerms = false;
                                 error = null;
                                 password.clear();
                                 form.currentState?.reset();
@@ -281,4 +352,25 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
     );
   }
+}
+
+class _LegalLink extends StatelessWidget {
+  const _LegalLink(this.label, this.document);
+  final String label;
+  final LegalDocument document;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    link: true,
+    child: InkWell(
+      onTap: () => LegalScreen.open(context, document),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+    ),
+  );
 }

@@ -20,6 +20,12 @@ class AccountMemoryRepository extends MemoryRepository
   Future<int> guestCount() async => 0;
   @override
   Future<void> moveGuestTo(String ownerId) async {}
+  final deletedOwners = <String>[];
+  @override
+  Future<void> deleteOwnerData(String ownerId) async {
+    deletedOwners.add(ownerId);
+    rows.clear();
+  }
 }
 
 void main() {
