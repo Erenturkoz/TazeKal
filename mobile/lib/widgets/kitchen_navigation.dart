@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_icons.dart';
 import '../design/taze_theme.dart';
 
 /// Keeps the primary action within the navigation area, clear of stock cards.
@@ -42,25 +43,18 @@ class KitchenNavigation extends StatelessWidget {
                   onDestinationSelected: onSelected,
                   destinations: [
                     const NavigationDestination(
-                      icon: Icon(Icons.grid_view_outlined),
-                      selectedIcon: Icon(Icons.grid_view_rounded),
+                      icon: TazeIconView(TazeIcon.fridge),
                       label: 'Mutfağım',
                     ),
                     const NavigationDestination(
-                      icon: Icon(Icons.schedule_outlined),
-                      selectedIcon: Icon(Icons.schedule_rounded),
+                      icon: TazeIconView(TazeIcon.soon),
                       label: 'Hatırlatmalar',
                     ),
                     NavigationDestination(
                       icon: Badge.count(
                         count: expiredCount,
                         isLabelVisible: expiredCount > 0,
-                        child: const Icon(Icons.history_outlined),
-                      ),
-                      selectedIcon: Badge.count(
-                        count: expiredCount,
-                        isLabelVisible: expiredCount > 0,
-                        child: const Icon(Icons.history_rounded),
+                        child: const TazeIconView(TazeIcon.history),
                       ),
                       label: 'Geçmiş',
                     ),
@@ -81,7 +75,11 @@ class KitchenNavigation extends StatelessWidget {
                           width: double.infinity,
                           child: FilledButton.icon(
                             onPressed: busy ? null : onAdd,
-                            icon: const Icon(Icons.add_rounded),
+                            icon: const TazeIconView(
+                              TazeIcon.plus,
+                              size: 20,
+                              strokeWidth: 2,
+                            ),
                             label: const Text('Ürün ekle'),
                           ),
                         ),
@@ -120,7 +118,11 @@ class KitchenNavigation extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_rounded, size: 22),
+                              TazeIconView(
+                                TazeIcon.plus,
+                                size: 22,
+                                strokeWidth: 2,
+                              ),
                               SizedBox(height: 1),
                               Text(
                                 'Ürün ekle',

@@ -232,11 +232,13 @@ void main() {
     await tester.tap(find.text('Kaydet'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.name, 'Günlük süt');
+    // Açma eylemi ürün ayrıntısında; tüketme satırdaki hızlı düğmede.
     await tester.scrollUntilVisible(
-      find.text('Bugün açtım'),
+      find.text('Günlük süt'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.tap(find.text('Günlük süt'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Bugün açtım'));
     await tester.pumpAndSettle();
@@ -245,9 +247,9 @@ void main() {
     await tester.tap(find.text('Kaydet'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.openedAt, isNotNull);
-    await tester.ensureVisible(find.text('Tükettim'));
+    await tester.ensureVisible(find.byTooltip('Günlük süt: tükettim'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tükettim'));
+    await tester.tap(find.byTooltip('Günlük süt: tükettim'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.status, 'consumed');
     expect(notifications.planned, isEmpty);

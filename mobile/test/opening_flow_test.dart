@@ -75,10 +75,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Bugün açtım'),
+        find.text('Süt'),
         220,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.tap(find.text('Süt'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Bugün açtım'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Bugün açtım'));
@@ -91,10 +93,13 @@ void main() {
       expect(saved.openedAt, today);
       expect(saved.daysLeft(today), 2);
       expect(saved.unopenedDaysLeft(today), 5);
+      // Açılma karşılaştırması ürün ayrıntısında gösterilir.
+      await tester.tap(find.text('Süt'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.textContaining('Açılmamış olsaydı ambalaj tarihine'),
         150,
-        scrollable: find.byType(Scrollable).first,
+        scrollable: find.byType(Scrollable).last,
       );
       expect(
         find.text('Açılmamış olsaydı ambalaj tarihine 5 gün kalacaktı.'),

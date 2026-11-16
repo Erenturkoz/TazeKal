@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'taze_icons.dart';
 
 /// 4 dp tabanlı aralık ölçeği. Ekranlarda serbest sayı yerine bunlar kullanılır.
 abstract final class TazeSpace {
@@ -33,12 +34,16 @@ class TazeStatusColors extends ThemeExtension<TazeStatusColors> {
     required this.dangerContainer,
     required this.onDangerContainer,
     required this.card,
+    required this.track,
   });
   final Color caution, cautionContainer, onCautionContainer;
   final Color danger, dangerContainer, onDangerContainer;
 
   /// Liste kartları ve özet yüzeyi.
   final Color card;
+
+  /// Bölümlü seçici zemini (depolama sekmeleri).
+  final Color track;
 
   static const light = TazeStatusColors(
     caution: Color(0xff8a5a1c),
@@ -48,6 +53,7 @@ class TazeStatusColors extends ThemeExtension<TazeStatusColors> {
     dangerContainer: Color(0xfff8e1dc),
     onDangerContainer: Color(0xff6e1f16),
     card: Colors.white,
+    track: Color(0xffeceee7),
   );
   static const dark = TazeStatusColors(
     caution: Color(0xffedc17e),
@@ -57,6 +63,7 @@ class TazeStatusColors extends ThemeExtension<TazeStatusColors> {
     dangerContainer: Color(0xff4a2420),
     onDangerContainer: Color(0xffffdad4),
     card: Color(0xff1b2a23),
+    track: Color(0xff22332b),
   );
 
   static TazeStatusColors of(BuildContext context) =>
@@ -78,6 +85,7 @@ class TazeStatusColors extends ThemeExtension<TazeStatusColors> {
       dangerContainer: mix(dangerContainer, other.dangerContainer),
       onDangerContainer: mix(onDangerContainer, other.onDangerContainer),
       card: mix(card, other.card),
+      track: mix(track, other.track),
     );
   }
 }
@@ -306,29 +314,29 @@ abstract final class TazeTheme {
 class StorageStyle {
   const StorageStyle(this.name, this.icon, this.accent, this.tint);
   final String name;
-  final IconData icon;
+  final TazeIcon icon;
   final Color accent, tint;
   static const all = StorageStyle(
     'Tümü',
-    Icons.grid_view_rounded,
+    TazeIcon.all,
     Color(0xff245b43),
     Color(0xffe8efdf),
   );
   static const fridge = StorageStyle(
     'Buzdolabı',
-    Icons.kitchen_outlined,
+    TazeIcon.fridge,
     Color(0xff35684d),
     Color(0xffe4eee3),
   );
   static const pantry = StorageStyle(
     'Kiler',
-    Icons.shelves,
+    TazeIcon.pantry,
     Color(0xff885b24),
     Color(0xfff4ead8),
   );
   static const freezer = StorageStyle(
     'Dondurucu',
-    Icons.ac_unit_rounded,
+    TazeIcon.freezer,
     Color(0xff366b85),
     Color(0xffe2eff5),
   );
@@ -344,3 +352,35 @@ class StorageStyle {
       ? Color.lerp(accent, const Color(0xff14211c), .76)!
       : tint;
 }
+
+const _months = [
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
+];
+const _weekdays = [
+  'Pazartesi',
+  'Salı',
+  'Çarşamba',
+  'Perşembe',
+  'Cuma',
+  'Cumartesi',
+  'Pazar',
+];
+
+/// "16 Kasım, Pazartesi"
+String longDay(DateTime d) =>
+    '${d.day} ${_months[d.month - 1]}, ${_weekdays[d.weekday - 1]}';
+
+/// "16 Kas"
+String shortDay(DateTime d) =>
+    '${d.day} ${_months[d.month - 1].substring(0, 3)}';

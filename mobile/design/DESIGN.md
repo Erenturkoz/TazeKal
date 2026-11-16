@@ -28,17 +28,31 @@ Depolama rengi yalnızca seçili depolama sekmesinde ve ürün ikonunun zeminind
 
 ## Bilgi düzeni
 
-- Üstte küçük marka satırı, profil ve hatırlatma ayarları. Zil ikonu bildirimlerin açık/kapalı olduğunu gösterir.
-- Mutfağım: tek kartta üç sayı (Stokta / Yaklaşan / Tarihsiz), depolama sekmeleri, arama, "Önce tüket" filtresi ve sıralama, ürün kartları. Miktarlar farklı birimler taşıdığı için toplanmaz; sayılar ürün kayıtlarını belirtir.
-- Boş mutfakta yalnızca tek karşılama kartı: illüstrasyon, ne işe yaradığı ve "İlk ürünü ekle".
-- Hatırlatmalar ve Geçmiş sekmelerinde kısa, olgusal bir başlık ve açıklama. Hatırlatmalar kapalıysa tek bir uyarı satırı.
-- Ürün kartı: ad, miktar · yer, durum rozeti (kalan gün, bugün, tarihi geçti, tarih eksik ya da tarih). Ayrıntılı tarihler karta dokunulduğunda açılır. Sık kullanılan Tükettim/Bugün açtım görünür; düzenleme ve kaldırma seçenekler menüsünde.
+Tasarım kaynağı: Claude Design tuvali (Mutfağım, Boş mutfak, Hatırlatmalar, Ürün ekle, Ürün detayı, Koyu tema, İkon seti) ve `/mnt/project-files/mobile-ui/tasarim-brief.md`.
+
+- Üst çubuk: marka ikonu, "Taze Kal" ve bugünün tarihi ("16 Kasım, Pazartesi"); profil ve zil (açık/kapalı iki ayrı ikon).
+- Mutfağım: tek kartta üç sayı (Stokta / 3 gün içinde / Tarihsiz), iz üzerinde segmentli depolama sekmeleri (seçili sekme yükseltilmiş), arama ve ikon sıralama düğmesi. Liste "3 gün içinde · N" ve "Takipte · N" gruplarına ayrılır; isme göre sıralamada tek liste. Miktarlar toplanmaz.
+- Ürün satırı: gıda grubu ikon karosu, ad, "miktar · yer", sağda kısa durum (ör. "1 gün / kaldı") ve yuvarlak hızlı "tükettim" düğmesi. Satıra dokununca alt sayfa açılır: durum bandı, tarih satırları, kaynak açıklaması, Tükettim / Bugün açtım / Düzenle / Kaldır.
+- Hatırlatmalar: Bugün / Yarın / tarih gruplarında aynı satırlar; bildirimler kapalıysa tek uyarı satırı ve "Aç".
+- Boş mutfak: üç depolama karosu, kısa açıklama, "İlk ürünü ekle" ve "Fişten ekle", altında üç ipucu satırı. İllüstrasyon yok.
 - Boş liste ve hata durumları ikon + kısa başlık + tek cümle; tam ekran hatalar `StatusMessage` ile.
-- Tek ana eylem: Ürün ekle. Giriş/profil için çalışmayan düğmeler eklenmez.
+- Tek ana eylem: Ürün ekle.
+
+## İkonlar (`lib/design/taze_icons.dart`, kaynak SVG'ler `design/icons/`)
+
+24 px ızgara, 1.75 px çizgi, yuvarlak uçlar, tek renk; rengi ve boyutu `IconTheme`'den alır (`TazeIconView`). Yeni bağımlılık yok, SVG yolları küçük bir ayrıştırıcıyla çizilir.
+
+| Grup | İkonlar | Kullanıldığı yer |
+|---|---|---|
+| Depolama | all, fridge, pantry, freezer | Depolama sekmeleri, boş mutfak karoları, alt menü (Mutfağım) |
+| Gıda grubu | dairy, cheese, egg, meat, fish, fruit, vegetable, bread, grain, drink, canned, frozen, other | Ürün satırı ve detay karosu; `foodIconFor(ad, yer)` seçer, tanınmayan ürün yer ikonunu alır |
+| Durum | soon, today, expired, noDate, consumed, opened | Alt menü (Hatırlatmalar), detay durum bandı, boş mutfak ipuçları |
+| Boş durum | emptyKitchen, noResults, allGood | Arama sonucu yok, hatırlatma yok, boş liste |
+| Arayüz | history, bell, bellOff, user, search, sort, check, plus, receipt, edit, brand | Alt menü, üst çubuk, arama/sıralama, hızlı tüketme, ekleme sayfası, marka |
 
 ## Erişilebilirlik ve performans
 
-En az 48 dp eylem hedefleri, açıklamalı ikonlar, doğal metin ölçekleme, büyük metinde 2 sütun depolama sekmeleri ve dikey özet, koyu/açık tema, SafeArea ve kaydırma altında kalan son ürünler için alt boşluk. Renk tek başına bilgi taşımaz. Dekoratif çizim ekran okuyucudan gizlidir. Listeler SliverList ile ihtiyaç oldukça oluşturulur. Sürekli/dekoratif animasyon yoktur.
+En az 48 dp eylem hedefleri, açıklamalı ikonlar, doğal metin ölçekleme, büyük metinde 2 sütun depolama sekmeleri ve dikey özet, koyu/açık tema, SafeArea ve kaydırma altında kalan son ürünler için alt boşluk. Renk tek başına bilgi taşımaz. Dekoratif ikonlar ekran okuyucudan gizlidir; hızlı tüketme düğmesi "<ürün>: tükettim" olarak okunur. Listeler SliverList ile ihtiyaç oldukça oluşturulur. Sürekli/dekoratif animasyon yoktur.
 
 ## Önizleme
 

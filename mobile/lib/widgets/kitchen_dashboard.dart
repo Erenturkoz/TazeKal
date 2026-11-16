@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../design/taze_icons.dart';
 import '../design/taze_theme.dart';
 import '../domain/product.dart';
-import 'pantry_art.dart';
 import 'shelf_life_panel.dart';
 import 'connection_status.dart';
 import 'sync_status.dart';
@@ -15,11 +15,9 @@ class KitchenDashboard extends StatelessWidget {
     required this.searchController,
     required this.busy,
     required this.enabled,
-    required this.onlySoon,
     required this.sortByName,
     required this.onLocation,
     required this.onSearch,
-    required this.onSoon,
     required this.onSort,
     required this.onAdd,
     required this.onSettings,
@@ -27,6 +25,7 @@ class KitchenDashboard extends StatelessWidget {
     required this.onOpen,
     required this.onEdit,
     required this.onRemove,
+    this.onReceipt,
     this.notificationError,
     this.showConsumed = false,
     this.onHistoryFilter,
@@ -35,9 +34,10 @@ class KitchenDashboard extends StatelessWidget {
   final int tab;
   final String location;
   final TextEditingController searchController;
-  final bool busy, enabled, onlySoon, sortByName;
+  final bool busy, enabled, sortByName;
   final ValueChanged<String> onLocation, onSearch;
-  final VoidCallback onSoon, onSort, onAdd, onSettings;
+  final VoidCallback onSort, onAdd, onSettings;
+  final VoidCallback? onReceipt;
   final ValueChanged<Product> onConsume, onOpen, onEdit, onRemove;
   final String? notificationError;
   final bool showConsumed;
@@ -45,7 +45,7 @@ class KitchenDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context), scheme = theme.colorScheme;
+    final theme = Theme.of(context);
     final style = StorageStyle.of(location), now = DateTime.now();
     final active = products
         .where((p) => p.status == 'active' && !p.isPast(now))
@@ -55,25 +55,21 @@ class KitchenDashboard extends StatelessWidget {
               ? p.status == 'consumed'
               : p.status == 'active' && p.isPast(now))
         : p.status == 'active' && !p.isPast(now);
+    bool isSoon(Product p) =>
+        p.hasTrackingDate && p.daysLeft(now) >= 0 && p.daysLeft(now) <= 3;
     final scoped = products
         .where(
           (p) => inSection(p) && (location == 'Tümü' || p.location == location),
         )
         .toList();
-    final soon = active
-        .where(
-          (p) =>
-              p.hasTrackingDate && p.daysLeft(now) >= 0 && p.daysLeft(now) <= 3,
-        )
-        .length;
-    final past = active.where((p) => !p.hasTrackingDate).length;
+    final soon = active.where(isSoon).length;
+    final undated = active.where((p) => !p.hasTrackingDate).length;
     final query = searchController.text.toLowerCase().replaceAll('ı', 'i');
     final rows =
         scoped
             .where(
               (p) =>
-                  ((tab != 1 && !onlySoon) ||
-                      (p.hasTrackingDate && p.daysLeft(now) <= 3)) &&
+                  (tab != 1 || (p.hasTrackingDate && p.daysLeft(now) <= 3)) &&
                   p.name.toLowerCase().replaceAll('ı', 'i').contains(query),
             )
             .toList()
@@ -93,19 +89,42 @@ class KitchenDashboard extends StatelessWidget {
         .length;
     final consumedCount = products.where((p) => p.status == 'consumed').length;
     final emptyKitchen = tab == 0 && active.isEmpty;
-    final filtered = query.isNotEmpty || onlySoon;
+
+    // Bölümler: Mutfağım'da önce 3 gün içindekiler, Hatırlatmalar'da güne
+    // göre. Ada göre sıralamada ve Geçmiş'te tek liste.
+    final sections = <(String?, List<Product>)>[];
+    if (sortByName || tab == 2) {
+      sections.add((null, rows));
+    } else if (tab == 0) {
+      final first = rows.where(isSoon).toList();
+      final rest = rows.where((p) => !isSoon(p)).toList();
+      if (first.isNotEmpty) {
+        sections.add(('3 gün içinde · ${first.length}', first));
+      }
+      if (rest.isNotEmpty) sections.add(('Takipte · ${rest.length}', rest));
+    } else {
+      for (final p in rows) {
+        final n = p.daysLeft(now);
+        final title = n <= 0
+            ? 'Bugün'
+            : n == 1
+            ? 'Yarın'
+            : longDay(p.effectiveExpiry!);
+        if (sections.isEmpty || sections.last.$1 != title) {
+          sections.add((title, [p]));
+        } else {
+          sections.last.$2.add(p);
+        }
+      }
+    }
+
     return CustomScrollView(
       key: PageStorageKey('kitchen-scroll:$tab:$showConsumed'),
       slivers: [
         const SliverToBoxAdapter(child: ConnectionBanner(localData: true)),
         const SliverToBoxAdapter(child: SyncStatus()),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            TazeSpace.page,
-            TazeSpace.sm,
-            TazeSpace.page,
-            0,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: TazeSpace.page),
           sliver: SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,7 +133,7 @@ class KitchenDashboard extends StatelessWidget {
                   height: 3,
                   child: busy ? const LinearProgressIndicator() : null,
                 ),
-                const SizedBox(height: TazeSpace.md),
+                const SizedBox(height: TazeSpace.sm),
                 if (tab != 0) ...[
                   Semantics(
                     header: true,
@@ -130,13 +149,17 @@ class KitchenDashboard extends StatelessWidget {
                               ? 'Önümüzdeki 3 gün içinde tarihi dolan ürün yok.'
                               : '$soon ürünün tarihi 3 gün içinde doluyor.')
                         : 'Tarihi geçenler ve tükettiklerin ana stoktan ayrı tutulur.',
-                    style: theme.textTheme.bodySmall,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: TazeSpace.lg),
                 ],
                 if (emptyKitchen) ...[
-                  _WelcomeCard(onAdd: onAdd),
+                  _WelcomeCard(onAdd: onAdd, onReceipt: onReceipt),
                   const SizedBox(height: TazeSpace.xl),
+                  const _Hints(),
+                  const SizedBox(height: TazeSpace.lg),
                 ] else if (tab == 0) ...[
                   _Summary(
                     large: scale > 1.4,
@@ -144,33 +167,29 @@ class KitchenDashboard extends StatelessWidget {
                       _SummaryItem(
                         value: active.length,
                         label: 'Stokta',
-                        icon: Icons.inventory_2_outlined,
-                        color: scheme.primary,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       _SummaryItem(
                         value: soon,
-                        label: 'Yaklaşan',
-                        icon: Icons.schedule_rounded,
+                        label: '3 gün içinde',
                         color: soon > 0
                             ? status.caution
-                            : scheme.onSurfaceVariant,
+                            : theme.colorScheme.onSurfaceVariant,
+                        emphasize: soon > 0,
                       ),
                       _SummaryItem(
-                        value: past,
+                        value: undated,
                         label: 'Tarihsiz',
-                        icon: Icons.help_outline_rounded,
-                        color: past > 0
-                            ? status.caution
-                            : scheme.onSurfaceVariant,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ],
                   ),
-                  const SizedBox(height: TazeSpace.xl),
+                  const SizedBox(height: TazeSpace.lg),
                 ],
                 if (notificationError != null) ...[
                   _Notice(
                     text: notificationError!,
-                    icon: Icons.notifications_off_outlined,
+                    action: 'Ayarlar',
                     onTap: onSettings,
                   ),
                   const SizedBox(height: TazeSpace.md),
@@ -178,8 +197,8 @@ class KitchenDashboard extends StatelessWidget {
                 if (tab == 1 && !enabled) ...[
                   _Notice(
                     text:
-                        'Telefon hatırlatmaları kapalı. Açarsan yaklaşan tarihleri bildirim olarak alırsın.',
-                    icon: Icons.notifications_outlined,
+                        'Bildirimler kapalı. Aç, tarihi yaklaşınca haber verelim.',
+                    action: 'Aç',
                     onTap: onSettings,
                   ),
                   const SizedBox(height: TazeSpace.lg),
@@ -204,88 +223,68 @@ class KitchenDashboard extends StatelessWidget {
                   const SizedBox(height: TazeSpace.lg),
                 ],
                 if (!emptyKitchen) ...[
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final twoRows = scale > 1.3 || constraints.maxWidth < 325;
-                      const gap = TazeSpace.sm;
-                      return Wrap(
-                        spacing: gap,
-                        runSpacing: gap,
-                        children: StorageStyle.values.map((s) {
-                          final count = products
-                              .where(
-                                (p) =>
-                                    inSection(p) &&
-                                    (s.name == 'Tümü' || p.location == s.name),
-                              )
-                              .length;
-                          return SizedBox(
-                            width:
-                                (constraints.maxWidth -
-                                    (twoRows ? gap : gap * 3)) /
-                                (twoRows ? 2 : 4),
-                            child: _StorageTab(
-                              style: s,
-                              count: count,
-                              selected: location == s.name,
-                              onTap: () => onLocation(s.name),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
+                  _StorageTabs(
+                    twoRows: scale > 1.3,
+                    selected: location,
+                    countOf: (s) => products
+                        .where(
+                          (p) =>
+                              inSection(p) &&
+                              (s.name == 'Tümü' || p.location == s.name),
+                        )
+                        .length,
+                    onSelected: onLocation,
                   ),
                   const SizedBox(height: TazeSpace.md),
-                  TextField(
-                    controller: searchController,
-                    onChanged: onSearch,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: location == 'Tümü'
-                          ? 'Ürün ara'
-                          : '$location içinde ara',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: query.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Aramayı temizle',
-                              icon: const Icon(Icons.close_rounded),
-                              onPressed: () {
-                                searchController.clear();
-                                onSearch('');
-                              },
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: TazeSpace.sm),
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: TazeSpace.sm,
+                  Row(
                     children: [
-                      if (tab == 0)
-                        FilterChip(
-                          label: const Text('Önce tüket'),
-                          avatar: const Icon(Icons.timelapse_rounded, size: 18),
-                          selected: onlySoon,
-                          onSelected: (_) => onSoon(),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.only(left: TazeSpace.xs),
-                          child: Text(
-                            '${rows.length} ürün',
-                            style: theme.textTheme.bodySmall,
+                      Expanded(
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: onSearch,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: location == 'Tümü'
+                                ? 'Ürün ara'
+                                : '$location içinde ara',
+                            prefixIcon: const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: TazeIconView(TazeIcon.search, size: 20),
+                            ),
+                            suffixIcon: query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Aramayı temizle',
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () {
+                                      searchController.clear();
+                                      onSearch('');
+                                    },
+                                  ),
                           ),
                         ),
-                      TextButton.icon(
+                      ),
+                      const SizedBox(width: TazeSpace.sm),
+                      IconButton.outlined(
                         onPressed: onSort,
-                        icon: const Icon(Icons.swap_vert_rounded, size: 18),
-                        label: Text(sortByName ? 'Ada göre' : 'Tarihe göre'),
+                        tooltip: sortByName
+                            ? 'Sıralama: ada göre'
+                            : 'Sıralama: tarihe göre',
+                        isSelected: sortByName,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(50, 50),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(TazeRadius.md),
+                          ),
+                        ),
+                        icon: const TazeIconView(TazeIcon.sort, size: 20),
                       ),
                     ],
                   ),
-                  const SizedBox(height: TazeSpace.sm),
+                  const SizedBox(height: TazeSpace.lg),
                 ],
               ],
             ),
@@ -297,33 +296,63 @@ class KitchenDashboard extends StatelessWidget {
             sliver: SliverToBoxAdapter(
               child: _EmptyState(
                 style: style,
-                filtered: filtered,
+                filtered: query.isNotEmpty,
                 reminders: tab == 1,
                 consumed: tab == 2 && showConsumed,
                 expired: tab == 2 && !showConsumed,
               ),
             ),
           ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            TazeSpace.page,
-            0,
-            TazeSpace.page,
-            TazeSpace.xl,
-          ),
-          sliver: SliverList.builder(
-            itemCount: rows.length,
-            itemBuilder: (context, index) => _ProductTile(
-              product: rows[index],
-              now: now,
-              busy: busy,
-              onConsume: onConsume,
-              onOpen: onOpen,
-              onEdit: onEdit,
-              onRemove: onRemove,
+        for (final (title, items) in sections)
+          if (items.isNotEmpty) ...[
+            if (title != null)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  TazeSpace.page,
+                  0,
+                  TazeSpace.page,
+                  TazeSpace.sm,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontSize: 13,
+                        color: tab == 1 && title == 'Bugün'
+                            ? status.danger
+                            : tab == 1 && title == 'Yarın'
+                            ? status.caution
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                TazeSpace.page,
+                0,
+                TazeSpace.page,
+                TazeSpace.xl,
+              ),
+              sliver: SliverList.builder(
+                itemCount: items.length,
+                itemBuilder: (context, index) => _ProductRow(
+                  product: items[index],
+                  now: now,
+                  busy: busy,
+                  first: index == 0,
+                  last: index == items.length - 1,
+                  onConsume: onConsume,
+                  onOpen: onOpen,
+                  onEdit: onEdit,
+                  onRemove: onRemove,
+                ),
+              ),
             ),
-          ),
-        ),
+          ],
       ],
     );
   }
@@ -331,54 +360,118 @@ class KitchenDashboard extends StatelessWidget {
 
 /// Boş mutfakta tek karşılama: ne işe yaradığını söyler ve ilk eylemi verir.
 class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard({required this.onAdd});
+  const _WelcomeCard({required this.onAdd, this.onReceipt});
   final VoidCallback onAdd;
+  final VoidCallback? onReceipt;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final large = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!large)
-            Container(
-              height: 148,
-              color: StorageStyle.all.accent,
-              alignment: Alignment.center,
-              child: PantryArt(accent: StorageStyle.all.accent),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          TazeSpace.xl,
+          TazeSpace.xl + 4,
+          TazeSpace.xl,
+          TazeSpace.xl,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ExcludeSemantics(
+              child: Wrap(
+                spacing: TazeSpace.sm + 2,
+                runSpacing: TazeSpace.sm,
+                children: [
+                  for (final s in StorageStyle.values.skip(1))
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: s.background(context),
+                        borderRadius: BorderRadius.circular(TazeRadius.md),
+                      ),
+                      child: Center(
+                        child: TazeIconView(
+                          s.icon,
+                          size: 26,
+                          color: s.foreground(context),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(TazeSpace.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Mutfağın şimdilik boş.',
-                    style: theme.textTheme.headlineSmall,
-                  ),
-                ),
-                const SizedBox(height: TazeSpace.sm),
-                Text(
-                  'Ürünlerini ve son tüketim tarihlerini ekle. Tarihi yaklaşanları sıralar, istersen telefonuna hatırlatırız.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: TazeSpace.lg),
-                FilledButton.tonalIcon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('İlk ürünü ekle'),
-                ),
-              ],
+            const SizedBox(height: TazeSpace.lg + 4),
+            Semantics(
+              header: true,
+              child: Text(
+                'Mutfağın şimdilik boş.',
+                style: theme.textTheme.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: TazeSpace.sm),
+            Text(
+              'Ürünlerini ve son tüketim tarihlerini ekle. Tarihi yaklaşanları sıralar, istersen telefonuna hatırlatırız.',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 15,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: TazeSpace.lg + 4),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const TazeIconView(TazeIcon.plus, size: 20),
+              label: const Text('İlk ürünü ekle'),
+            ),
+            if (onReceipt != null) ...[
+              const SizedBox(height: TazeSpace.sm),
+              OutlinedButton.icon(
+                onPressed: onReceipt,
+                icon: const TazeIconView(TazeIcon.receipt, size: 20),
+                label: const Text('Fişten ekle'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Hints extends StatelessWidget {
+  const _Hints();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    Widget hint(TazeIcon icon, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: TazeSpace.md + 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TazeIconView(icon, size: 20, color: color),
+          const SizedBox(width: TazeSpace.md),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: color),
             ),
           ),
         ],
       ),
+    );
+    return Column(
+      children: [
+        hint(TazeIcon.soon, 'Tarihi 3 gün içinde dolanlar en üstte görünür.'),
+        hint(
+          TazeIcon.bell,
+          'Hatırlatmalar cihazda planlanır, internet gerekmez.',
+        ),
+        hint(
+          TazeIcon.fridge,
+          'Tarih bilinmiyorsa uygun ürünler için kaynağı belli bir tahmin önerilir.',
+        ),
+      ],
     );
   }
 }
@@ -387,13 +480,13 @@ class _SummaryItem {
   const _SummaryItem({
     required this.value,
     required this.label,
-    required this.icon,
     required this.color,
+    this.emphasize = false,
   });
   final int value;
   final String label;
-  final IconData icon;
   final Color color;
+  final bool emphasize;
 }
 
 /// Tek kartta üç sayı. Miktarlar farklı birimler taşıdığı için kayıt sayılır.
@@ -404,51 +497,35 @@ class _Summary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget label(_SummaryItem item) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(item.icon, size: 16, color: item.color),
-        const SizedBox(width: TazeSpace.xs + 2),
-        Flexible(
-          child: Text(
-            item.label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
+    Widget label(_SummaryItem item) => Text(
+      item.label,
+      style: theme.textTheme.labelMedium?.copyWith(color: item.color),
     );
-    Widget value(_SummaryItem item) =>
-        Text('${item.value}', style: theme.textTheme.headlineMedium);
+    Widget value(_SummaryItem item) => Text(
+      '${item.value}',
+      style: theme.textTheme.headlineMedium?.copyWith(
+        color: item.emphasize ? item.color : null,
+      ),
+    );
     Widget cell(_SummaryItem item) => Semantics(
       label: '${item.label}: ${item.value} ürün',
       excludeSemantics: true,
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: TazeSpace.lg,
-          vertical: large ? TazeSpace.sm : TazeSpace.lg,
+          vertical: large ? TazeSpace.sm : TazeSpace.md + 2,
         ),
         // Büyük metinde sayı etiketin yanına alınır; kart gereksiz uzamaz.
         child: large
             ? Row(
                 children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: label(item),
-                    ),
-                  ),
+                  Expanded(child: label(item)),
                   value(item),
                 ],
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  label(item),
-                  const SizedBox(height: TazeSpace.xs),
-                  value(item),
-                ],
+                children: [label(item), const SizedBox(height: 2), value(item)],
               ),
       ),
     );
@@ -477,84 +554,112 @@ class _Summary extends StatelessWidget {
   }
 }
 
-class _StorageTab extends StatelessWidget {
-  const _StorageTab({
-    required this.style,
-    required this.count,
+/// Zemin üzerinde bölümlü seçici; seçili alan yükseltilmiş kart yüzeyidir.
+class _StorageTabs extends StatelessWidget {
+  const _StorageTabs({
+    required this.twoRows,
     required this.selected,
-    required this.onTap,
+    required this.countOf,
+    required this.onSelected,
   });
-  final StorageStyle style;
-  final int count;
-  final bool selected;
-  final VoidCallback onTap;
+  final bool twoRows;
+  final String selected;
+  final int Function(StorageStyle) countOf;
+  final ValueChanged<String> onSelected;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context), scheme = theme.colorScheme;
-    final fg = selected ? style.foreground(context) : scheme.onSurface;
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: '${style.name}, $count ürün',
-      excludeSemantics: true,
-      child: Material(
-        color: selected
-            ? style.background(context)
-            : TazeStatusColors.of(context).card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(TazeRadius.md),
-          side: BorderSide(
-            color: selected
-                ? style.foreground(context)
-                : scheme.outlineVariant.withValues(alpha: .6),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(TazeRadius.md),
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: TazeSpace.xs,
-                vertical: TazeSpace.sm,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    style.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: fg,
-                      fontSize: 13,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+    final colors = TazeStatusColors.of(context);
+    Widget tab(StorageStyle s) {
+      final on = selected == s.name, count = countOf(s);
+      return Semantics(
+        selected: on,
+        button: true,
+        label: '${s.name}, $count ürün',
+        excludeSemantics: true,
+        child: Material(
+          color: on ? colors.card : Colors.transparent,
+          elevation: on ? 1 : 0,
+          shadowColor: Colors.black26,
+          borderRadius: BorderRadius.circular(TazeRadius.sm + 2),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(TazeRadius.sm + 2),
+            onTap: () => onSelected(s.name),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 2,
+                  vertical: TazeSpace.xs,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      s.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontSize: 13,
+                        fontWeight: on ? FontWeight.w700 : FontWeight.w600,
+                        color: on && s.name != 'Tümü'
+                            ? s.foreground(context)
+                            : scheme.onSurface,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '$count',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: selected ? fg : scheme.onSurfaceVariant,
+                    Text(
+                      '$count',
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
+      );
+    }
+
+    final styles = StorageStyle.values;
+    return Container(
+      padding: const EdgeInsets.all(TazeSpace.xs),
+      decoration: BoxDecoration(
+        color: colors.track,
+        borderRadius: BorderRadius.circular(TazeRadius.md + 2),
       ),
+      child: twoRows
+          ? Column(
+              children: [
+                for (var r = 0; r < 2; r++)
+                  Row(
+                    children: [
+                      for (var c = 0; c < 2; c++) ...[
+                        if (c > 0) const SizedBox(width: TazeSpace.xs),
+                        Expanded(child: tab(styles[r * 2 + c])),
+                      ],
+                    ],
+                  ),
+              ],
+            )
+          : Row(
+              children: [
+                for (var i = 0; i < styles.length; i++) ...[
+                  if (i > 0) const SizedBox(width: TazeSpace.xs),
+                  Expanded(child: tab(styles[i])),
+                ],
+              ],
+            ),
     );
   }
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.text, required this.icon, required this.onTap});
-  final String text;
-  final IconData icon;
+  const _Notice({
+    required this.text,
+    required this.action,
+    required this.onTap,
+  });
+  final String text, action;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
@@ -565,32 +670,41 @@ class _Notice extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(TazeRadius.md),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            TazeSpace.lg,
-            TazeSpace.md,
-            TazeSpace.sm,
-            TazeSpace.md,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: status.onCautionContainer),
-              const SizedBox(width: TazeSpace.md),
-              Expanded(
-                child: Text(
-                  text,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Padding(
+            padding: const EdgeInsets.all(TazeSpace.md),
+            child: Row(
+              children: [
+                const SizedBox(width: TazeSpace.xs),
+                TazeIconView(
+                  TazeIcon.bellOff,
+                  size: 20,
+                  color: status.onCautionContainer,
+                ),
+                const SizedBox(width: TazeSpace.md),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      color: status.onCautionContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: TazeSpace.sm),
+                Text(
+                  action,
                   style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: status.onCautionContainer,
                   ),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: status.onCautionContainer,
-              ),
-            ],
+                const SizedBox(width: TazeSpace.xs),
+              ],
+            ),
           ),
         ),
       ),
@@ -613,25 +727,25 @@ class _EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     final (icon, title, body) = filtered
         ? (
-            Icons.search_off_rounded,
+            TazeIcon.noResults,
             'Sonuç yok',
-            'Aramayı veya filtreyi değiştir; diğer depolama alanlarına da bakabilirsin.',
+            'Aramayı değiştir; diğer depolama alanlarına da bakabilirsin.',
           )
         : reminders
         ? (
-            Icons.check_circle_outline_rounded,
+            TazeIcon.allGood,
             'Acil bir şey yok',
             'Tarihi 3 gün içinde dolan ürünler burada görünür.',
           )
         : expired
         ? (
-            Icons.check_circle_outline_rounded,
+            TazeIcon.allGood,
             'Tarihi geçen ürün yok',
             'Tarihi geçen ürünler burada toplanır; ana stok listene karışmaz.',
           )
         : consumed
         ? (
-            Icons.history_rounded,
+            TazeIcon.consumed,
             'Henüz tüketilen ürün yok',
             '“Tükettim” dediğin ürünler burada listelenir.',
           )
@@ -644,7 +758,11 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: TazeSpace.xxl),
       child: Column(
         children: [
-          Icon(icon, size: 32, color: theme.colorScheme.onSurfaceVariant),
+          TazeIconView(
+            icon,
+            size: 32,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: TazeSpace.md),
           Text(
             title,
@@ -666,11 +784,79 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _ProductTile extends StatelessWidget {
-  const _ProductTile({
+enum _Tone { ok, caution, danger, done }
+
+/// Ürünün durumu: listede kısa metin, ayrıntıda uzun metin ve ton.
+class _Status {
+  factory _Status(Product product, DateTime now) {
+    final n = product.effectiveExpiry == null ? 999999 : product.daysLeft(now);
+    final estimate = product.usesEstimate;
+    if (product.status == 'consumed') {
+      return const _Status._('Tüketildi', '', 'Tüketildi', _Tone.done);
+    }
+    if (n < 0) {
+      return _Status._(
+        'Geçti',
+        shortDay(product.effectiveExpiry!),
+        'Kontrol edilmeli',
+        _Tone.danger,
+      );
+    }
+    if (!product.hasTrackingDate) {
+      final none = product.expiresAt == null && product.openedAt == null;
+      return _Status._(
+        'Tarih yok',
+        none ? 'eklenmedi' : 'bilgi eksik',
+        none ? 'Tarih eklenmedi' : 'Açılma süresi için bilgi eksik',
+        _Tone.caution,
+      );
+    }
+    if (n == 0) {
+      return const _Status._('Bugün', 'son gün', 'Bugün tüket', _Tone.danger);
+    }
+    if (n <= 3) {
+      return _Status._(
+        '$n gün',
+        estimate ? 'tahmini' : 'kaldı',
+        '${estimate ? 'Tahmini ' : ''}$n gün kaldı',
+        _Tone.caution,
+      );
+    }
+    final date = product.effectiveExpiry!;
+    return _Status._(
+      n <= 14 ? '$n gün' : shortDay(date),
+      estimate
+          ? 'tahmini'
+          : n <= 14
+          ? shortDay(date)
+          : '${date.year}',
+      '${estimate ? 'Tahmini son gün' : 'Son gün'} ${displayDate(date)}',
+      _Tone.ok,
+    );
+  }
+  const _Status._(this.short, this.sub, this.long, this.tone);
+  final String short, sub, long;
+  final _Tone tone;
+
+  Color color(BuildContext context) {
+    final status = TazeStatusColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return switch (tone) {
+      _Tone.danger => status.danger,
+      _Tone.caution => status.caution,
+      _Tone.done => scheme.primary,
+      _Tone.ok => scheme.onSurface,
+    };
+  }
+}
+
+class _ProductRow extends StatelessWidget {
+  const _ProductRow({
     required this.product,
     required this.now,
     required this.busy,
+    required this.first,
+    required this.last,
     required this.onConsume,
     required this.onOpen,
     required this.onEdit,
@@ -678,299 +864,324 @@ class _ProductTile extends StatelessWidget {
   });
   final Product product;
   final DateTime now;
-  final bool busy;
+  final bool busy, first, last;
   final ValueChanged<Product> onConsume, onOpen, onEdit, onRemove;
-  IconData get foodIcon {
-    final name = product.name.toLowerCase();
-    if (name.contains('süt') ||
-        name.contains('yoğurt') ||
-        name.contains('peynir')) {
-      return Icons.local_drink_outlined;
-    }
-    if (name.contains('ekmek') ||
-        name.contains('un') ||
-        name.contains('makarna')) {
-      return Icons.bakery_dining_outlined;
-    }
-    if (name.contains('elma') ||
-        name.contains('muz') ||
-        name.contains('domates') ||
-        name.contains('avokado')) {
-      return Icons.eco_outlined;
-    }
-    return StorageStyle.of(product.location).icon;
-  }
 
   void details(BuildContext context) {
+    final status = _Status(product, now);
+    final colors = TazeStatusColors.of(context);
+    final consumed = product.status == 'consumed';
+    final style = StorageStyle.of(product.location);
+    final scheme = Theme.of(context).colorScheme;
+    final (bg, fg) = switch (status.tone) {
+      _Tone.danger => (colors.dangerContainer, colors.onDangerContainer),
+      _Tone.caution => (colors.cautionContainer, colors.onCautionContainer),
+      _ => (scheme.surfaceContainerHigh, scheme.onSurface),
+    };
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            TazeSpace.xl,
-            0,
-            TazeSpace.xl,
-            TazeSpace.xl,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                product.name,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: TazeSpace.xs),
-              Text(
-                '${product.quantity} · ${product.location}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: TazeSpace.lg),
-              _DetailLine('Alış tarihi', displayDate(product.purchasedAt)),
-              _DetailLine(
-                product.usesPurchaseEstimate
-                    ? 'Tahmini tarih'
-                    : 'Ambalaj tarihi',
-                displayDate(product.expiresAt),
-              ),
-              if (product.openingDays != null)
-                _DetailLine(
-                  'Açıldıktan sonra',
-                  '${product.openingDays} gün${product.afterOpeningDays == null ? ' • tahmini' : ' • ambalaj talimatı'}',
-                ),
-              if (product.openedAt != null)
-                _DetailLine('Açılma tarihi', displayDate(product.openedAt!)),
-              if (product.hasTrackingDate)
-                _DetailLine(
-                  'Takip edilen tarih',
-                  displayDate(product.effectiveExpiry),
-                ),
-              const SizedBox(height: TazeSpace.lg),
-              ShelfLifePanel(product: product, now: now, showSource: true),
-              const SizedBox(height: TazeSpace.xl),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Tamam'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+      builder: (sheet) {
+        final theme = Theme.of(sheet);
+        void act(ValueChanged<Product> action) {
+          Navigator.pop(sheet);
+          action(product);
+        }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context), scheme = theme.colorScheme;
-    final style = StorageStyle.of(product.location);
-    final status = TazeStatusColors.of(context);
-    final n = product.effectiveExpiry == null ? 999999 : product.daysLeft(now),
-        consumed = product.status == 'consumed';
-    final unknown = !product.hasTrackingDate;
-    final past = !consumed && n < 0;
-    final warning = !consumed && (unknown || n <= 3);
-    final label = consumed
-        ? 'Tüketildi'
-        : n < 0
-        ? 'Kontrol edilmeli'
-        : unknown
-        ? (product.expiresAt == null && product.openedAt == null
-              ? 'Tarih eklenmedi'
-              : 'Açılma süresi için bilgi eksik')
-        : n == 0
-        ? 'Bugün tüket'
-        : n <= 3
-        ? '${product.usesEstimate ? 'Tahmini ' : ''}$n gün kaldı'
-        : '${product.usesEstimate ? 'Tahmini ' : ''}${displayDate(product.effectiveExpiry)}';
-    final (pillColor, pillText, pillIcon) = past
-        ? (
-            status.dangerContainer,
-            status.onDangerContainer,
-            Icons.error_outline,
-          )
-        : warning
-        ? (
-            status.cautionContainer,
-            status.onCautionContainer,
-            unknown ? Icons.help_outline_rounded : Icons.schedule_rounded,
-          )
-        : consumed
-        ? (
-            scheme.secondaryContainer,
-            scheme.onSecondaryContainer,
-            Icons.check_rounded,
-          )
-        : (
-            scheme.surfaceContainerHigh,
-            scheme.onSurfaceVariant,
-            Icons.event_outlined,
-          );
-    return Padding(
-      padding: const EdgeInsets.only(bottom: TazeSpace.md),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => details(context),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  TazeSpace.lg,
-                  TazeSpace.lg,
-                  TazeSpace.xs,
-                  TazeSpace.md,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              TazeSpace.page,
+              0,
+              TazeSpace.page,
+              TazeSpace.page,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: style.background(context),
-                        borderRadius: BorderRadius.circular(TazeRadius.sm),
-                      ),
-                      child: Icon(
-                        foodIcon,
-                        size: 22,
-                        color: style.foreground(context),
-                      ),
-                    ),
-                    const SizedBox(width: TazeSpace.md),
+                    _FoodTile(product: product, size: 52),
+                    const SizedBox(width: TazeSpace.md + 2),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             product.name,
-                            style: theme.textTheme.titleMedium,
+                            style: theme.textTheme.headlineSmall,
                           ),
-                          const SizedBox(height: 2),
                           Text(
-                            [
-                              product.quantity,
-                              product.location,
-                              if (product.openedAt != null && !consumed)
-                                'Açılmış ürün',
-                            ].where((t) => t.isNotEmpty).join(' · '),
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: TazeSpace.sm),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: TazeSpace.sm,
-                              vertical: TazeSpace.xs,
-                            ),
-                            decoration: BoxDecoration(
-                              color: pillColor,
-                              borderRadius: BorderRadius.circular(
-                                TazeRadius.sm,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(pillIcon, size: 14, color: pillText),
-                                const SizedBox(width: TazeSpace.xs),
-                                Flexible(
-                                  child: Text(
-                                    label,
-                                    style: TextStyle(
-                                      color: pillText,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            '${product.quantity} · ${product.location}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    PopupMenuButton<String>(
-                      tooltip: '${product.name} seçenekleri',
-                      enabled: !busy,
-                      icon: const Icon(Icons.more_vert_rounded),
-                      onSelected: (action) {
-                        if (action == 'edit') onEdit(product);
-                        if (action == 'remove') onRemove(product);
-                        if (action == 'details') details(context);
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'details',
-                          child: Text('Ürün detayı'),
-                        ),
-                        if (!consumed)
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Düzenle'),
+                  ],
+                ),
+                const SizedBox(height: TazeSpace.lg + 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: TazeSpace.lg,
+                    vertical: TazeSpace.md + 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(TazeRadius.md),
+                  ),
+                  child: Row(
+                    children: [
+                      TazeIconView(
+                        switch (status.tone) {
+                          _Tone.danger => TazeIcon.expired,
+                          _Tone.done => TazeIcon.consumed,
+                          _ =>
+                            product.hasTrackingDate
+                                ? TazeIcon.soon
+                                : TazeIcon.noDate,
+                        },
+                        size: 22,
+                        color: fg,
+                      ),
+                      const SizedBox(width: TazeSpace.md),
+                      Expanded(
+                        child: Text(
+                          status.long,
+                          style: TextStyle(
+                            color: fg,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
                           ),
-                        const PopupMenuItem(
-                          value: 'remove',
-                          child: Text('Kaldır'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!consumed && status.short == 'Geçti')
+                  Padding(
+                    padding: const EdgeInsets.only(top: TazeSpace.sm),
+                    child: Text(
+                      'Bu ürün bozulmuş olabilir. Tüketim süresi geçti.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.danger,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: TazeSpace.sm),
+                _DetailLine('Alış tarihi', displayDate(product.purchasedAt)),
+                _DetailLine(
+                  product.usesPurchaseEstimate
+                      ? 'Tahmini tarih'
+                      : 'Ambalaj tarihi',
+                  displayDate(product.expiresAt),
+                ),
+                if (product.openingDays != null)
+                  _DetailLine(
+                    'Açıldıktan sonra',
+                    '${product.openingDays} gün${product.afterOpeningDays == null ? ' • tahmini' : ' • ambalaj talimatı'}',
+                  ),
+                if (product.openedAt != null)
+                  _DetailLine('Açılma tarihi', displayDate(product.openedAt!)),
+                if (product.hasTrackingDate)
+                  _DetailLine(
+                    'Takip edilen tarih',
+                    displayDate(product.effectiveExpiry),
+                  ),
+                const SizedBox(height: TazeSpace.lg),
+                ShelfLifePanel(product: product, now: now, showSource: true),
+                const SizedBox(height: TazeSpace.lg),
+                if (!consumed) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: busy ? null : () => act(onConsume),
+                          icon: const TazeIconView(TazeIcon.check, size: 20),
+                          label: const Text('Tükettim'),
+                        ),
+                      ),
+                      if (product.openedAt == null) ...[
+                        const SizedBox(width: TazeSpace.sm),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: busy ? null : () => act(onOpen),
+                            icon: TazeIconView(
+                              TazeIcon.opened,
+                              size: 20,
+                              color: style.foreground(sheet),
+                            ),
+                            label: const Text('Bugün açtım'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: TazeSpace.sm),
+                ],
+                Row(
+                  children: [
+                    if (!consumed)
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: busy ? null : () => act(onEdit),
+                          icon: const TazeIconView(TazeIcon.edit, size: 18),
+                          label: const Text('Düzenle'),
+                        ),
+                      ),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: busy ? null : () => act(onRemove),
+                        style: TextButton.styleFrom(
+                          foregroundColor: colors.danger,
+                        ),
+                        child: const Text('Kaldır'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), scheme = theme.colorScheme;
+    final colors = TazeStatusColors.of(context);
+    final status = _Status(product, now);
+    final consumed = product.status == 'consumed';
+    const radius = Radius.circular(TazeRadius.lg);
+    final line = scheme.outlineVariant.withValues(alpha: .6);
+    final shape = RoundedRectangleBorder(
+      side: BorderSide(color: line),
+      borderRadius: BorderRadius.vertical(
+        top: first ? radius : Radius.zero,
+        bottom: last ? radius : Radius.zero,
+      ),
+    );
+    final meta = [
+      product.quantity,
+      product.location,
+      if (product.openedAt != null && !consumed) 'açıldı',
+    ].where((t) => t.isNotEmpty).join(' · ');
+    // Kenarlık yalnız dışta: satırlar arası çizgi ayrı çizilir, böylece grup
+    // tek kart gibi görünür.
+    return Transform.translate(
+      offset: Offset(0, first ? 0 : -1),
+      child: Material(
+        color: colors.card,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: '${product.name}, $meta, ${status.long}',
+                excludeSemantics: true,
+                child: InkWell(
+                  onTap: () => details(context),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      TazeSpace.md + 2,
+                      TazeSpace.md,
+                      TazeSpace.sm,
+                      TazeSpace.md,
+                    ),
+                    child: Row(
+                      children: [
+                        _FoodTile(product: product, size: 40),
+                        const SizedBox(width: TazeSpace.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                product.name,
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(meta, style: theme.textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: TazeSpace.sm),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              status.short,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: status.color(context),
+                              ),
+                            ),
+                            if (status.sub.isNotEmpty)
+                              Text(
+                                status.sub,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            if (past)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  TazeSpace.lg,
-                  0,
-                  TazeSpace.lg,
-                  TazeSpace.md,
-                ),
-                child: Text(
-                  'Bu ürün bozulmuş olabilir. Tüketim süresi geçti.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: status.danger,
                   ),
                 ),
               ),
-            if (!consumed &&
-                (product.openedAt != null || product.openingProfile != null))
+            ),
+            if (!consumed)
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  TazeSpace.lg,
-                  0,
-                  TazeSpace.lg,
-                  TazeSpace.md,
+                padding: const EdgeInsets.only(right: TazeSpace.sm),
+                child: IconButton.outlined(
+                  onPressed: busy ? null : () => onConsume(product),
+                  tooltip: '${product.name}: tükettim',
+                  style: IconButton.styleFrom(
+                    foregroundColor: scheme.primary,
+                    side: BorderSide(color: line),
+                  ),
+                  icon: const TazeIconView(TazeIcon.check, size: 20),
                 ),
-                child: ShelfLifePanel(product: product, now: now),
-              ),
-            if (!consumed) ...[
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: TazeSpace.sm),
-                child: Wrap(
-                  spacing: TazeSpace.xs,
-                  children: [
-                    TextButton.icon(
-                      onPressed: busy ? null : () => onConsume(product),
-                      icon: const Icon(Icons.check_rounded, size: 18),
-                      label: const Text('Tükettim'),
-                    ),
-                    if (product.openedAt == null)
-                      TextButton.icon(
-                        onPressed: busy ? null : () => onOpen(product),
-                        icon: const Icon(Icons.lock_open_rounded, size: 18),
-                        label: const Text('Bugün açtım'),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+              )
+            else
+              const SizedBox(width: TazeSpace.md),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FoodTile extends StatelessWidget {
+  const _FoodTile({required this.product, required this.size});
+  final Product product;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final style = StorageStyle.of(product.location);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: style.background(context),
+        borderRadius: BorderRadius.circular(
+          size > 44 ? TazeRadius.md : TazeRadius.sm,
+        ),
+      ),
+      child: Center(
+        child: TazeIconView(
+          foodIconFor(product.name, product.location),
+          size: size * .55,
+          color: style.foreground(context),
         ),
       ),
     );
