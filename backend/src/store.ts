@@ -30,5 +30,15 @@ export class Store implements OnModuleDestroy {
   async rotate(id: string, oldHash: string, newHash: string): Promise<SessionRow | undefined> {
     return (await this.db.query('UPDATE sessions SET refresh_hash=$3 WHERE id=$1 AND refresh_hash=$2 AND revoked_at IS NULL AND expires_at>now() RETURNING *', [id, oldHash, newHash])).rows[0];
   }
-  async revoke(id: string) { await this.db.query('UPDATE sessions SET revoked_at=now() WHERE id=$1', [id]); }
+  async revoke(id: string) { await this.db.query('UPDATE sessions SET revoked_at=now() WHERE id=$1 AND revoked_at IS NULL', [id]); }
+  /** Revokes every active session of a user, optionally keeping the caller's current session. Returns the count. */
+  async revokeAll(userId: string, keepSessionId: string | null = null): Promise<number> {
+    const result = await this.db.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL AND ($2::uuid IS NULL OR id<>$2::uuid)', [userId, keepSessionId]);
+    return result.rowCount ?? 0;
+  }
+  /** Expired sessions can never be used again; drop them so the table does not grow per login forever. */
+  async pruneSessions(userId: string) { await this.db.query('DELETE FROM sessions WHERE user_id=$1 AND expires_at<=now()', [userId]); }
+  async setPassword(id: string, hash: string): Promise<UserRow | undefined> {
+    return (await this.db.query('UPDATE users SET password_hash=$2 WHERE id=$1 AND password_hash IS NOT NULL RETURNING *', [id, hash])).rows[0];
+  }
 }
