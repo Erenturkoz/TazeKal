@@ -7,7 +7,9 @@ import 'product_form.dart';
 import '../widgets/kitchen_dashboard.dart';
 import '../widgets/kitchen_navigation.dart';
 import '../widgets/loading_skeleton.dart';
+import '../design/taze_icons.dart';
 import '../design/taze_theme.dart';
+import '../widgets/status_message.dart';
 import '../services/receipt_scanner.dart';
 import 'receipt_screen.dart';
 
@@ -35,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool loading = true, busy = false, enabled = false;
   String location = 'Tümü';
   final searchController = TextEditingController();
-  bool onlySoon = false, sortByName = false;
+  bool sortByName = false;
   bool showConsumed = false;
   String? error, notificationError;
   TimeOfDay time = const TimeOfDay(hour: 10, minute: 0);
@@ -230,27 +232,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.fromLTRB(
+            TazeSpace.sm,
+            0,
+            TazeSpace.sm,
+            TazeSpace.lg,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(
+                  TazeSpace.lg,
+                  0,
+                  TazeSpace.lg,
+                  TazeSpace.md,
+                ),
                 child: Text(
-                  'Mutfağına nasıl ekleyelim?',
+                  'Nasıl eklemek istersin?',
                   style: Theme.of(ctx).textTheme.titleLarge,
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.edit_note_rounded),
+                leading: const TazeIconView(TazeIcon.edit),
                 title: const Text('Elle ürün ekle'),
                 subtitle: const Text('Bir ürünün bilgilerini kendin gir.'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => Navigator.pop(ctx, 'manual'),
               ),
               ListTile(
-                leading: const Icon(Icons.document_scanner_outlined),
+                leading: const TazeIconView(TazeIcon.receipt),
                 title: const Text('Fişten ürün ekle'),
                 subtitle: const Text(
                   'Fotoğrafı tara, ürünleri kontrol edip ekle.',
@@ -276,16 +288,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (context, update) => SafeArea(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(
+                TazeSpace.xl,
+                0,
+                TazeSpace.xl,
+                TazeSpace.xl,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Hatırlatma ayarları',
-                    style: Theme.of(context).textTheme.headlineSmall,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: TazeSpace.sm),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Telefon bildirimleri'),
@@ -313,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule_outlined),
+                    leading: const TazeIconView(TazeIcon.soon),
                     title: const Text('Hatırlatma saati'),
                     subtitle: Text(time.format(context)),
                     onTap: busy
@@ -338,31 +355,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             if (sheetContext.mounted) update(() {});
                           },
                   ),
-                  const Text(
-                    '3, 2 ve 1 gün kala, son gün ve ertesi gün hatırlatılır. Aynı güne denk gelen ürünler tek bildirimde toplanır.',
+                  const SizedBox(height: TazeSpace.sm),
+                  Text(
+                    'Son tüketim tarihine 3, 2 ve 1 gün kala, son gün ve ertesi gün hatırlatılır. Aynı güne denk gelen ürünler tek bildirimde toplanır.',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Hatırlatmalar cihazda planlanır. İnternet gerekmez; telefon izinleri ve pil yönetimi teslimi geciktirebilir. Ayarlanan saat geçtiyse bugünün uyarıları Hatırlatmalar sekmesinde görünür.',
+                  const SizedBox(height: TazeSpace.sm),
+                  Text(
+                    'Hatırlatmalar cihazda planlanır, internet gerekmez. Telefon izinleri ve pil tasarrufu teslimi geciktirebilir; kaçırılan uyarılar Hatırlatmalar sekmesinde görünür.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Ürünlerin bu cihazda saklanır. Hatırlatmalar için internet bağlantısı gerekmez.',
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
+                  const SizedBox(height: TazeSpace.lg),
+                  OutlinedButton.icon(
                     onPressed: busy
                         ? null
                         : () async {
                             await runAction(() async {});
                             if (sheetContext.mounted) update(() {});
                           },
-                    child: const Text('Hatırlatmaları yeniden planla'),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Hatırlatmaları yeniden planla'),
                   ),
                   if (notificationError != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(notificationError!),
+                      padding: const EdgeInsets.only(top: TazeSpace.md),
+                      child: Text(
+                        notificationError!,
+                        style: TextStyle(
+                          color: TazeStatusColors.of(context).caution,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -399,45 +421,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context), scheme = theme.colorScheme;
-    final style = StorageStyle.of(location);
-    final pageColor = Color.lerp(
-      scheme.surface,
-      style.background(context),
-      location == 'Tümü' ? 0 : .32,
-    );
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: pageColor,
       appBar: AppBar(
-        backgroundColor: pageColor,
-        toolbarHeight: 76,
-        titleSpacing: 24,
+        toolbarHeight: 64,
+        titleSpacing: TazeSpace.page,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(
-                Icons.eco_outlined,
-                color: scheme.onPrimary,
-                size: 25,
-              ),
+            TazeIconView(
+              TazeIcon.brand,
+              color: scheme.primary,
+              size: 24,
+              strokeWidth: 2,
             ),
-            const SizedBox(width: 10),
-            const Flexible(
+            const SizedBox(width: TazeSpace.sm),
+            Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
-                  'taze kal',
-                  style: TextStyle(
-                    fontSize: 25,
-                    letterSpacing: -1,
-                    fontWeight: FontWeight.w800,
-                  ),
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Taze Kal',
+                      style: TextStyle(
+                        fontSize: 20,
+                        letterSpacing: -.3,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      longDay(DateTime.now()),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -450,18 +472,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               tooltip: widget.profileName == null
                   ? 'Giriş yap veya kayıt ol'
                   : 'Profilim',
-              icon: const Icon(Icons.person_outline_rounded),
+              icon: const TazeIconView(TazeIcon.user),
             ),
           Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: IconButton.filledTonal(
+            padding: const EdgeInsets.only(right: TazeSpace.sm),
+            child: IconButton(
               onPressed: busy ? null : settings,
               tooltip: 'Hatırlatma ayarları',
-              style: IconButton.styleFrom(
-                backgroundColor: style.background(context),
-                foregroundColor: style.foreground(context),
-              ),
-              icon: const Icon(Icons.notifications_outlined),
+              icon: TazeIconView(enabled ? TazeIcon.bell : TazeIcon.bellOff),
             ),
           ),
         ],
@@ -471,26 +489,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: loading
             ? const KitchenSkeleton()
             : error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.cloud_off_outlined, size: 40),
-                      const SizedBox(height: 16),
-                      Text(error!),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () {
-                          setState(() => loading = true);
-                          load();
-                        },
-                        child: const Text('Tekrar dene'),
-                      ),
-                    ],
-                  ),
-                ),
+            ? StatusMessage(
+                icon: Icons.error_outline_rounded,
+                title: 'Ürünler yüklenemedi',
+                message: 'Cihazdaki kayıtlar okunamadı. Verilerin silinmedi.',
+                actionLabel: 'Tekrar dene',
+                onAction: () {
+                  setState(() => loading = true);
+                  load();
+                },
               )
             : Center(
                 child: ConstrainedBox(
@@ -504,7 +511,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       searchController: searchController,
                       busy: busy,
                       enabled: enabled,
-                      onlySoon: onlySoon,
                       sortByName: sortByName,
                       showConsumed: showConsumed,
                       onHistoryFilter: (value) =>
@@ -512,13 +518,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       notificationError: notificationError,
                       onLocation: (value) => setState(() => location = value),
                       onSearch: (_) => setState(() {}),
-                      onSoon: () => setState(() => onlySoon = !onlySoon),
+                      onReceipt: receipt,
                       onSort: () => setState(() => sortByName = !sortByName),
                       onAdd: add,
-                      onReminders: () => setState(() {
-                        tab = 1;
-                        onlySoon = false;
-                      }),
                       onSettings: settings,
                       onConsume: (p) => runAction(
                         () => widget.repository.save(
@@ -546,7 +548,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             searchController.clear();
           }
           tab = i;
-          onlySoon = false;
         }),
       ),
     );

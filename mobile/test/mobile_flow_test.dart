@@ -115,17 +115,39 @@ void main() {
       addTearDown(
         tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
       );
+      // Dolu mutfak: özet, depolama sekmeleri ve ürün kartları büyük metinde.
+      final repo = MemoryRepository(), today = calendarDay(DateTime.now());
+      for (final (name, location, days) in [
+        ('Günlük süt', 'Buzdolabı', 1),
+        ('Pirinç', 'Kiler', 200),
+        ('Bezelye', 'Dondurucu', 120),
+      ]) {
+        await repo.save(
+          Product(
+            id: name,
+            name: name,
+            quantity: '1 adet',
+            location: location,
+            purchasedAt: today,
+            expiresAt: addCalendarDays(today, days),
+          ),
+        );
+      }
       await tester.pumpWidget(
-        TazeKalApp(
-          repository: MemoryRepository(),
-          notifications: FakeNotifications(),
-        ),
+        TazeKalApp(repository: repo, notifications: FakeNotifications()),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.text('Bezelye'),
+        250,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(
         find.text('Dondurucu'),
-        250,
+        -250,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
@@ -146,7 +168,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Mutfağın,\nkontrol altında.'), findsOneWidget);
+      expect(find.text('Mutfağın şimdilik boş.'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
@@ -210,11 +232,13 @@ void main() {
     await tester.tap(find.text('Kaydet'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.name, 'Günlük süt');
+    // Açma eylemi ürün ayrıntısında; tüketme satırdaki hızlı düğmede.
     await tester.scrollUntilVisible(
-      find.text('Bugün açtım'),
+      find.text('Günlük süt'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.tap(find.text('Günlük süt'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Bugün açtım'));
     await tester.pumpAndSettle();
@@ -223,9 +247,9 @@ void main() {
     await tester.tap(find.text('Kaydet'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.openedAt, isNotNull);
-    await tester.ensureVisible(find.text('Tükettim'));
+    await tester.ensureVisible(find.byTooltip('Günlük süt: tükettim'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tükettim'));
+    await tester.tap(find.byTooltip('Günlük süt: tükettim'));
     await tester.pumpAndSettle();
     expect(repo.rows.values.single.status, 'consumed');
     expect(notifications.planned, isEmpty);

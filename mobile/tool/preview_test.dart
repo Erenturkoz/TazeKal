@@ -20,6 +20,11 @@ void main() {
     final sdk = Directory.fromUri(
       config.uri.resolve(flutterPackage['rootUri'] as String),
     ).parent.parent.path;
+    // SDK sürümüne göre dosya adları büyük/küçük harf farklı olabilir.
+    final fontDir = Directory('$sdk/bin/cache/artifacts/material_fonts');
+    File font(String name) => fontDir.listSync().whereType<File>().firstWhere(
+      (f) => f.uri.pathSegments.last.toLowerCase() == name,
+    );
     final fonts = FontLoader('Roboto');
     for (final name in [
       'roboto-regular.ttf',
@@ -27,13 +32,7 @@ void main() {
       'roboto-medium.ttf',
     ]) {
       fonts.addFont(
-        Future.value(
-          ByteData.sublistView(
-            File(
-              '$sdk/bin/cache/artifacts/material_fonts/$name',
-            ).readAsBytesSync(),
-          ),
-        ),
+        Future.value(ByteData.sublistView(font(name).readAsBytesSync())),
       );
     }
     await fonts.load();
@@ -41,9 +40,7 @@ void main() {
       ..addFont(
         Future.value(
           ByteData.sublistView(
-            File(
-              '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
-            ).readAsBytesSync(),
+            font('materialicons-regular.otf').readAsBytesSync(),
           ),
         ),
       );
@@ -54,35 +51,66 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final repo = MemoryRepository(), now = calendarDay(DateTime.now());
-    final samples = [
-      ('Günlük süt', '1 litre', 'Buzdolabı', 1),
-      ('Avokado', '2 adet', 'Buzdolabı', 2),
-      ('Baldo pirinç', '1 kg', 'Kiler', 200),
-      ('Bezelye', '450 g', 'Dondurucu', 120),
-    ];
-    for (final (name, quantity, location, days) in samples) {
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final now = calendarDay(DateTime.now());
+    Future<MemoryRepository> stocked() async {
+      final repo = MemoryRepository();
+      final samples = [
+        ('Günlük süt', '1 litre', 'Buzdolabı', 1),
+        ('Avokado', '2 adet', 'Buzdolabı', 2),
+        ('Baldo pirinç', '1 kg', 'Kiler', 200),
+        ('Bezelye', '450 g', 'Dondurucu', 120),
+        ('Yoğurt', '500 g', 'Buzdolabı', -1),
+      ];
+      for (final (name, quantity, location, days) in samples) {
+        await repo.save(
+          Product(
+            id: name,
+            name: name,
+            quantity: quantity,
+            location: location,
+            purchasedAt: addCalendarDays(now, -3),
+            expiresAt: addCalendarDays(now, days),
+            afterOpeningDays: name == 'Günlük süt' ? 3 : null,
+          ),
+        );
+      }
       await repo.save(
         Product(
-          id: name,
-          name: name,
-          quantity: quantity,
-          location: location,
+          id: 'Zeytinyağı',
+          name: 'Zeytinyağı',
+          quantity: '1 şişe',
+          location: 'Kiler',
           purchasedAt: now,
-          expiresAt: addCalendarDays(now, days),
-          afterOpeningDays: name == 'Günlük süt' ? 3 : null,
         ),
       );
+      return repo;
     }
+
     final key = GlobalKey();
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: key,
-        child: TazeKalApp(repository: repo, notifications: FakeNotifications()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    Future<void> show(
+      MemoryRepository repo, {
+      Brightness brightness = Brightness.light,
+      double textScale = 1,
+    }) async {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      tester.platformDispatcher.textScaleFactorTestValue = textScale;
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: TazeKalApp(
+            repository: repo,
+            notifications: FakeNotifications(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
     Future<void> capture(String name) async {
+      expect(tester.takeException(), isNull, reason: name);
       final boundary =
           key.currentContext!.findRenderObject() as RenderRepaintBoundary;
       await tester.runAsync(() async {
@@ -95,24 +123,48 @@ void main() {
       });
     }
 
+    Future<void> scrollTo(String text, double delta) async {
+      await tester.scrollUntilVisible(
+        find.text(text),
+        delta,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show(MemoryRepository());
+    await capture('bos-mutfak');
+
+    await show(await stocked());
     await capture('mutfagim');
-    await tester.scrollUntilVisible(
-      find.text('Günlük süt'),
-      140,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
+    await scrollTo('Zeytinyağı', 140);
     await capture('urunler');
-    await tester.scrollUntilVisible(
-      find.text('Kiler'),
-      -160,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Kiler'));
+    await scrollTo('Kiler', -160);
+    await tester.tap(find.text('Kiler').first);
     await tester.pumpAndSettle();
     await capture('kiler');
-    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Hatırlatmalar'));
+    await tester.pumpAndSettle();
+    await capture('hatirlatmalar');
+    await tester.tap(find.text('Geçmiş'));
+    await tester.pumpAndSettle();
+    await capture('gecmis');
+    await tester.tap(find.text('Mutfağım'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ürün ekle'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Elle ürün ekle'));
+    await tester.pumpAndSettle();
+    await capture('urun-formu');
+
+    await show(await stocked(), brightness: Brightness.dark);
+    await capture('mutfagim-koyu');
+
+    await show(await stocked(), textScale: 1.6);
+    await capture('buyuk-metin');
+    await scrollTo('Bezelye', 200);
+    await capture('buyuk-metin-urunler');
+
     debugDisableShadows = true;
     await tester.pumpWidget(const SizedBox());
   });

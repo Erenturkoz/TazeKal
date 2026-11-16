@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 import '../domain/product.dart';
 import '../domain/shelf_life_profile.dart';
 
@@ -83,10 +84,10 @@ class ShelfLifePanel extends StatelessWidget {
         ? 'Ambalaj tarihinin son günü'
         : 'Ambalaj tarihine $unopened gün';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(TazeSpace.lg),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(TazeRadius.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,11 +95,7 @@ class ShelfLifePanel extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.auto_awesome_outlined,
-                size: 20,
-                color: scheme.primary,
-              ),
+              Icon(Icons.timelapse_rounded, size: 20, color: scheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -141,9 +138,9 @@ class ShelfLifePanel extends StatelessWidget {
           ],
           if (product.usesEstimate) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '0–4°C’de saklama varsayımı • Bozulma ölçümü değildir.',
-              style: TextStyle(fontSize: 12),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
           if (showSource)

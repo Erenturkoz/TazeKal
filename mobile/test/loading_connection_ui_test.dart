@@ -55,7 +55,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump();
-      expect(find.text('Mutfağın,\nkontrol altında.'), findsOneWidget);
+      expect(find.text('Mutfağın şimdilik boş.'), findsOneWidget);
       expect(find.byType(KitchenSkeleton), findsNothing);
       expect(auth.validating, true);
       response.completeError(http.ClientException('offline'));
@@ -127,7 +127,7 @@ void main() {
     repo.ready.complete([]);
     await tester.pumpAndSettle();
     expect(find.byType(KitchenSkeleton), findsNothing);
-    expect(find.text('Mutfağın,\nkontrol altında.'), findsOneWidget);
+    expect(find.text('Mutfağın şimdilik boş.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
