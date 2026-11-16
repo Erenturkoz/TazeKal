@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../domain/expiry_prediction.dart';
+import '../domain/food_category.dart';
 import '../domain/product.dart';
 import '../domain/shelf_life_profile.dart';
 
@@ -13,9 +15,19 @@ class ShelfLifePanel extends StatelessWidget {
   final DateTime now;
   final bool showSource;
 
+  ExpiryPrediction? _categoryGuess() {
+    if (product.hasTrackingDate) return null;
+    final prediction = predictExpiry(product, now);
+    // Only surface a guess the reminder pipeline does not already cover.
+    return prediction.basis == PredictionBasis.categoryHeuristic
+        ? prediction
+        : null;
+  }
+
   void source(BuildContext context) {
     final profile = product.openingProfile;
     final purchase = ShelfLifeProfile.find(product.shelfLifeProfileId);
+    final guess = _categoryGuess();
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -25,6 +37,16 @@ class ShelfLifePanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (guess != null) ...[
+                Text(
+                  'Ürün adından tahmin edilen grup: ${guess.category!.label}.',
+                ),
+                const SizedBox(height: 4),
+                for (final reason in guess.reasons) Text('• $reason'),
+                const SizedBox(height: 4),
+                const Text(FoodCategory.source, style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 12),
+              ],
               if (product.usesPurchaseEstimate && purchase != null) ...[
                 Text(
                   'Alış tarihinden itibaren ${purchase.days} gün: ${purchase.label}. Buzdolabında 0–4°C ve uygun saklama varsayımıyla planlama tahminidir. Ambalaj tarihi bilindiğinde önceliklidir.',
@@ -73,6 +95,7 @@ class ShelfLifePanel extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final opened = product.openedAt;
     final unopened = product.unopenedDaysLeft(now);
+    final guess = _categoryGuess();
     final unopenedText = unopened == null
         ? 'Tarih yok • stokta takip ediliyor'
         : product.usesPurchaseEstimate
@@ -137,6 +160,18 @@ class ShelfLifePanel extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Açtığında ${product.openingDays} günlük ${product.afterOpeningDays == null ? 'tahmini takip' : 'ambalaj talimatı'} başlayacak.',
+            ),
+          ],
+          if (guess != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${guess.headline} • Kontrol tarihi: ${displayDate(guess.date)}',
+              key: const Key('category-guess'),
+              style: TextStyle(color: guess.isPast ? scheme.error : null),
+            ),
+            Text(
+              '${guess.category!.label} • ${guess.confidenceLabel} • Bildirim gönderilmez',
+              style: const TextStyle(fontSize: 12),
             ),
           ],
           if (product.usesEstimate) ...[

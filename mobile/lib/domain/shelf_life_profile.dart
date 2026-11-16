@@ -1,3 +1,5 @@
+import 'turkish_text.dart';
+
 /// Conservative planning estimates after purchase, never a safety guarantee.
 class ShelfLifeProfile {
   const ShelfLifeProfile(this.id, this.label, this.days, this.source, this.url);
@@ -62,15 +64,7 @@ class ShelfLifeProfile {
     String? openingProfile,
   ) {
     if (location != 'Buzdolabı') return null;
-    final text = name
-        .toLowerCase()
-        .replaceAll('ı', 'i')
-        .replaceAll('ö', 'o')
-        .replaceAll('ü', 'u')
-        .replaceAll('ş', 's')
-        .replaceAll('ç', 'c')
-        .replaceAll('ğ', 'g')
-        .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ');
+    final text = normalizeTurkish(name);
     if (RegExp(
       r'\b(toz|bebek|bitkisel|badem|yulaf|soya|hindistan|uht|uzun|pismis|pisirilmis|haslanmis|salata[a-z]*|corba[a-z]*|konserve|dondurulmus|fume|sosis|salam|sucuk|kofte|kavrulmus)\b',
     ).hasMatch(text)) {

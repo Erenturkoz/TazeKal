@@ -50,6 +50,14 @@ Yeni arayüzün x64 debug ve release APK'ları derlendi. Mevcut emülatöre gün
 - Tüketilen ürün arşivi; tüketilen/kaldırılan ürünler bekleyen planlardan çıkarılır.
 - SQLite kalıcı kayıt. Hesap, sunucu veya internet gerekmez. Uygulama silinirse yerel veriler kaybolabilir.
 
+## Son kullanma tahmini
+
+`lib/domain/expiry_prediction.dart` her ürün için tek bir tahmin üretir: risk (tarihi geçti / bozulmuş olabilir / bugün son gün / yakında / taze / bilgi yok), tarih, kalan gün, güven seviyesi ve gerekçeler. Kanıt sırası: ambalaj tarihi ve ambalajdaki açılma talimatı (yüksek güven), kaynaklı açılma ve alış kuralları (orta güven), ürün adından çıkarılan gıda grubu (düşük güven, `lib/domain/food_category.dart`).
+
+Gıda grubu tahmini yalnız tarih takibi olmayan ürünlerde devreye girer. Saklama yerine (buzdolabı/kiler/dondurucu) ve açılma tarihine göre ihtiyatlı bir kontrol tarihi verir, bilinen ambalaj tarihini asla uzatmaz ve bildirim planlamaz. Detay panelinde "Düşük güven • Bildirim gönderilmez" etiketiyle görünür. Ad tanınmazsa tarih uydurulmaz.
+
+Makine öğrenmesi şimdilik kullanılmıyor: etiketli veri yok ve bozulma fiziksel olarak ölçülmüyor. Kullanıcıların tüketme/atma kayıtları birikince grup sürelerini kişiselleştirmek sonraki adım olabilir; bu durumda da süre ambalaj tarihini aşmamalı.
+
 ## Bildirim sınırları
 
 Android'de yaklaşık zamanlı bildirim kullanılır; gereksiz kesin alarm yetkisi istenmez. İşletim sistemi, pil yönetimi, cihaz kapalı olması ve bildirim izni teslimi etkileyebilir. Yeniden başlatma için Android receiver yapılandırması vardır. Saat dilimi değişikliği uygulamaya yeniden girildiğinde uygulanır. İzin sonradan telefon ayarlarından kaldırılırsa uygulama içindeki tercih tek başına sistem iznini göstermez; yeniden etkinleştirme sistem iznini kontrol eder.
