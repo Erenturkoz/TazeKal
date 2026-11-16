@@ -28,7 +28,7 @@ async function setup(t) {
   const account = async email => (await api.post('/v1/auth/register').send({ email, displayName: 'Test', password: 'a-strong-password' }).expect(201)).body;
   const push = (session, mutations) => api.post('/v1/products/sync').auth(session.accessToken, { type: 'bearer' }).send({ mutations });
   const pull = (session, after = 0, limit = 200) => api.get(`/v1/products/changes?after=${after}&limit=${limit}`).auth(session.accessToken, { type: 'bearer' });
-  return { api, pool, account, push, pull };
+  return { api, app, pool, account, push, pull };
 }
 const product = (id = 'milk', name = 'Süt') => ({ id, name, quantity: '1 L', location: 'Buzdolabı', purchased_at: '2026-11-01', expires_at: '2026-11-10',
   opened_at: null, after_opening_days: null, status: 'active', opening_profile_id: 'milk_uht_v1', cold_storage_confirmed: 1 });
@@ -112,4 +112,27 @@ test('PostgreSQL account lock serializes parallel writers', { skip: !process.env
   const results = await Promise.all([push(a, [mutation()]).expect(201), push(a, [mutation(product('milk', 'Other device'))]).expect(201)]);
   assert.deepEqual(results.map(r => r.body.results[0].outcome).sort(), ['applied', 'conflict']);
   assert.equal((await pull(a).expect(200)).body.cursor, 1);
+});
+
+test('Per-account product cap blocks new rows atomically but still allows updates and other accounts', async t => {
+  const { app, account, push, pull } = await setup(t);
+  const { ProductsService } = require('../dist/products');
+  app.get(ProductsService).maxProducts = 2;
+  const a = await account('cap@example.com'), b = await account('cap-other@example.com');
+  await push(a, [mutation(product('p1')), mutation(product('p2'))]).expect(201);
+  // A batch that would exceed the cap is rejected as a whole: nothing from it is stored.
+  await push(a, [mutation(product('p1', 'Güncel'), 1), mutation(product('p3'))]).expect(413);
+  // pg-mem does not roll back reliably; real PostgreSQL (CI) verifies the batch left no trace.
+  if (process.env.TEST_DATABASE_URL) assert.equal((await pull(a).expect(200)).body.cursor, 2);
+  const current = (await pull(a).expect(200)).body.changes.find(c => c.id === 'p1').version;
+  const update = await push(a, [mutation(product('p1', 'Güncel'), current)]).expect(201);
+  assert.equal(update.body.results[0].outcome, 'applied');
+  await push(a, [mutation(product('p4'))]).expect(413);
+  await push(b, [mutation(product('p3'))]).expect(201);
+});
+test('Product names reject control characters', async t => {
+  const { account, push } = await setup(t), a = await account('ctrl@example.com');
+  await push(a, [mutation(product('ctrl', 'Süt\u0000'))]).expect(400);
+  await push(a, [mutation({ ...product('ctrl2'), quantity: '1\nL' })]).expect(400);
+  await push(a, [mutation(product('emoji', 'Süt 🥛'))]).expect(201);
 });

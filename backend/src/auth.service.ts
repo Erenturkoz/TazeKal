@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { checkPassword, hashPassword, tokenHash } from './crypto';
@@ -21,6 +21,7 @@ export class AuthService {
   }
   private async issue(user: UserRow) {
     const id = randomUUID(), refreshToken = `${id}.${randomBytes(48).toString('base64url')}`;
+    await this.store.pruneSessions(user.id);
     await this.store.createSession(id, user.id, tokenHash(refreshToken), new Date(Date.now() + 30 * 86400000));
     return { accessToken: await this.access(user.id, id), refreshToken, user: publicUser(user) };
   }
@@ -67,10 +68,15 @@ export class AuthService {
   }
   async refresh(refreshToken: string) {
     const id = refreshToken.split('.')[0];
-    if (!/^[0-9a-f-]{36}$/.test(id)) throw new UnauthorizedException('Oturum sona erdi.');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) throw new UnauthorizedException('Oturum sona erdi.');
     const next = `${id}.${randomBytes(48).toString('base64url')}`;
     const session = await this.store.rotate(id, tokenHash(refreshToken), tokenHash(next));
-    if (!session) throw new UnauthorizedException('Oturum sona erdi.');
+    if (!session) {
+      // A known session id with a wrong/old secret means the refresh token was replayed (possibly stolen).
+      // Revoke that session so neither the attacker nor the victim keeps using a leaked token family.
+      await this.store.revoke(id);
+      throw new UnauthorizedException('Oturum sona erdi.');
+    }
     const user = await this.store.user(session.user_id);
     if (!user) throw new UnauthorizedException('Oturum sona erdi.');
     return { accessToken: await this.access(user.id, id), refreshToken: next, user: publicUser(user) };
@@ -85,4 +91,17 @@ export class AuthService {
       return { userId: payload.sub, sessionId: payload.sid };
     } catch { throw new UnauthorizedException('Oturum sona erdi. Tekrar giriş yap.'); }
   }
+  async changePassword(userId: string, sessionId: string, currentPassword: string, newPassword: string) {
+    const user = await this.store.user(userId);
+    if (!user) throw new UnauthorizedException('Oturum sona erdi. Tekrar giriş yap.');
+    if (!user.password_hash) throw new BadRequestException('Bu hesap Google ile giriş yapıyor; değiştirilecek bir şifre yok.');
+    if (!await checkPassword(currentPassword, user.password_hash)) throw new ForbiddenException('Mevcut şifre hatalı.');
+    if (currentPassword === newPassword) throw new BadRequestException('Yeni şifre mevcut şifreden farklı olmalı.');
+    const updated = await this.store.setPassword(userId, await hashPassword(newPassword));
+    if (!updated) throw new ConflictException('Hesap bilgisi değişti. Tekrar dene.');
+    // Other devices may hold a leaked password's sessions; keep only the device that changed it.
+    const revokedSessions = await this.store.revokeAll(userId, sessionId);
+    return { user: publicUser(updated), revokedSessions };
+  }
+  async logoutAll(userId: string) { await this.store.revokeAll(userId); }
 }

@@ -5,6 +5,8 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService, publicUser } from './auth.service';
 import { Store } from './store';
 
+/** Rejects control characters (newlines, NUL, escape codes) in names shown to users and in logs. */
+export const NO_CONTROL_CHARS = /^[^\p{Cc}]*$/u;
 class EmailDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value)
   @IsEmail() @MaxLength(254) email!: string;
@@ -13,13 +15,17 @@ class EmailDto {
 class RegisterDto extends EmailDto {
   @MinLength(10) declare password: string;
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
-  @IsString() @Length(2, 80) @Matches(/\S/) displayName!: string;
+  @IsString() @Length(2, 80) @Matches(/\S/) @Matches(NO_CONTROL_CHARS) displayName!: string;
 }
 class GoogleDto { @IsString() @Length(20, 10000) idToken!: string; }
+class ChangePasswordDto {
+  @IsString() @MinLength(1) @MaxLength(128) currentPassword!: string;
+  @IsString() @MinLength(10) @MaxLength(128) newPassword!: string;
+}
 class RefreshDto { @IsString() @Length(40, 300) refreshToken!: string; }
 class ProfileDto {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
-  @IsString() @Length(2, 80) @Matches(/\S/) displayName!: string;
+  @IsString() @Length(2, 80) @Matches(/\S/) @Matches(NO_CONTROL_CHARS) displayName!: string;
 }
 export interface AuthRequest { headers: { authorization?: string }; identity: { userId: string; sessionId: string }; }
 @Injectable()
@@ -41,12 +47,18 @@ export class AuthController {
   login(@Body() body: EmailDto) { return this.auth.login(body.email, body.password); }
   @Post('google') @HttpCode(200) @Throttle({ default: { limit: 10, ttl: 60000 } })
   google(@Body() body: GoogleDto) { return this.auth.googleLogin(body.idToken); }
-  @Post('refresh') @HttpCode(200)
+  @Post('refresh') @HttpCode(200) @Throttle({ default: { limit: 30, ttl: 60000 } })
   refresh(@Body() body: RefreshDto) { return this.auth.refresh(body.refreshToken); }
   @Post('logout') @HttpCode(204) @UseGuards(AuthGuard)
   logout(@Req() req: AuthRequest) { return this.auth.store.revoke(req.identity.sessionId); }
   @Post('google/link') @HttpCode(200) @UseGuards(AuthGuard)
   link(@Req() req: AuthRequest, @Body() body: GoogleDto) { return this.auth.linkGoogle(req.identity.userId, body.idToken); }
+  @Post('logout-all') @HttpCode(204) @UseGuards(AuthGuard)
+  logoutAll(@Req() req: AuthRequest) { return this.auth.logoutAll(req.identity.userId); }
+  @Post('password') @HttpCode(200) @UseGuards(AuthGuard) @Throttle({ default: { limit: 5, ttl: 60000 } })
+  changePassword(@Req() req: AuthRequest, @Body() body: ChangePasswordDto) {
+    return this.auth.changePassword(req.identity.userId, req.identity.sessionId, body.currentPassword, body.newPassword);
+  }
 }
 @Controller('users/me') @UseGuards(AuthGuard)
 export class ProfileController {

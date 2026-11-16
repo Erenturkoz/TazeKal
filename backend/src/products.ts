@@ -1,15 +1,15 @@
-import { BadRequestException, Body, ConflictException, Controller, Get, Inject, Injectable, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, PayloadTooLargeException, Controller, Get, Inject, Injectable, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from 'class-validator';
 import { createHash } from 'node:crypto';
 import { PoolClient } from 'pg';
 import { Store } from './store';
-import { AuthGuard, AuthRequest } from './http';
+import { AuthGuard, AuthRequest, NO_CONTROL_CHARS } from './http';
 
 export class ProductData {
   @IsString() @Matches(/^[a-zA-Z0-9_-]{1,100}$/) id!: string;
-  @IsString() @Length(1, 100) @Matches(/\S/) name!: string;
-  @IsString() @Length(1, 40) @Matches(/\S/) quantity!: string;
+  @IsString() @Length(1, 100) @Matches(/\S/) @Matches(NO_CONTROL_CHARS) name!: string;
+  @IsString() @Length(1, 40) @Matches(/\S/) @Matches(NO_CONTROL_CHARS) quantity!: string;
   @IsIn(['Buzdolabı', 'Kiler', 'Dondurucu']) location!: string;
   @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) purchased_at!: string;
   @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) expires_at?: string | null;
@@ -31,6 +31,8 @@ export class ProductMutation {
 class PushDto {
   @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => ProductMutation) mutations!: ProductMutation[];
 }
+/** Upper bound on stored product rows (including deletion tombstones) per account, so one account cannot fill the database. */
+export const MAX_PRODUCTS_PER_USER = 20000;
 interface ProductRow { id: string; version: number; cursor: number; deleted: boolean; data: ProductData | null; }
 export interface RemoteProduct { id: string; version: number; cursor: number; deleted: boolean; product: ProductData | null; }
 interface MutationResult { mutationId: string; outcome: 'applied' | 'conflict'; remote: RemoteProduct | null; }
@@ -62,6 +64,7 @@ function validateMutation(m: ProductMutation) {
 
 @Injectable()
 export class ProductsService {
+  maxProducts = MAX_PRODUCTS_PER_USER;
   constructor(@Inject(Store) private readonly store: Store) {}
   async push(userId: string, mutations: ProductMutation[]) {
     const ids = new Set<string>();
@@ -76,26 +79,32 @@ export class ProductsService {
       await tx.query('INSERT INTO product_sync_heads(user_id,cursor) VALUES($1,0) ON CONFLICT DO NOTHING', [userId]);
       // One account lock serializes version checks and revision allocation.
       await tx.query('SELECT cursor FROM product_sync_heads WHERE user_id=$1 FOR UPDATE', [userId]);
+      let stored = Number((await tx.query('SELECT count(*) AS n FROM user_products WHERE user_id=$1', [userId])).rows[0].n);
       const results: MutationResult[] = [];
-      for (const m of mutations) results.push(await this.apply(tx, userId, m));
+      for (const m of mutations) {
+        const result = await this.apply(tx, userId, m, stored);
+        if (result.created) stored++;
+        results.push(result.result);
+      }
       await tx.query('COMMIT');
       return { results };
     } catch (error) { await tx.query('ROLLBACK'); throw error; }
     finally { tx.release(); }
   }
-  private async apply(tx: PoolClient, userId: string, m: ProductMutation): Promise<MutationResult> {
+  private async apply(tx: PoolClient, userId: string, m: ProductMutation, stored: number): Promise<{ result: MutationResult; created: boolean }> {
     const product = m.deleted ? null : canonicalProduct(m.product!);
     const hash = createHash('sha256').update(JSON.stringify({ productId: m.productId, baseVersion: m.baseVersion, deleted: m.deleted, product })).digest('hex');
     const previous = (await tx.query('SELECT request_hash,result FROM product_mutations WHERE user_id=$1 AND mutation_id=$2', [userId, m.mutationId])).rows[0];
     if (previous) {
       if (previous.request_hash !== hash) throw new ConflictException('Bu işlem kimliği farklı bir içerikle kullanılmış.');
-      return previous.result as MutationResult;
+      return { result: previous.result as MutationResult, created: false };
     }
     const existing = (await tx.query<ProductRow>('SELECT * FROM user_products WHERE user_id=$1 AND id=$2', [userId, m.productId])).rows[0];
     let result: MutationResult;
     if ((existing?.version ?? 0) !== m.baseVersion) {
       result = { mutationId: m.mutationId, outcome: 'conflict', remote: existing ? remote(existing) : null };
     } else {
+      if (!existing && stored >= this.maxProducts) throw new PayloadTooLargeException('Hesaptaki ürün sınırına ulaşıldı. Eski veya tüketilmiş ürünleri silmeyi dene.');
       const head = (await tx.query('UPDATE product_sync_heads SET cursor=cursor+1 WHERE user_id=$1 RETURNING cursor', [userId])).rows[0];
       const version = (existing?.version ?? 0) + 1;
       const row = (await tx.query<ProductRow>(`INSERT INTO user_products(user_id,id,version,cursor,deleted,data)
@@ -106,7 +115,7 @@ export class ProductsService {
     }
     await tx.query('INSERT INTO product_mutations(user_id,mutation_id,request_hash,result) VALUES($1,$2,$3,$4::jsonb)',
       [userId, m.mutationId, hash, JSON.stringify(result)]);
-    return result;
+    return { result, created: !existing && result.outcome === 'applied' };
   }
   async changes(userId: string, afterRaw: string | undefined, limitRaw: string | undefined) {
     const after = afterRaw ?? '0', limit = limitRaw ?? '200';

@@ -40,6 +40,7 @@ async function setup(t) {
   const api = request(app.getHttpServer());
   const register = async (email = 'eren@example.com') => (await api.post('/v1/auth/register').send({ email, displayName: 'Eren', password: 'a-strong-password' }).expect(201)).body;
   return { api, pool, identities, register };
+
 }
 test('Password hashes have distinct salts and reject wrong passwords', async () => {
   const a = await hashPassword('a-strong-password'), b = await hashPassword('a-strong-password');
@@ -62,7 +63,7 @@ test('Refresh is rotated, cannot be replayed, and logout revokes access immediat
   const { api, register } = await setup(t), session = await register();
   const next = await api.post('/v1/auth/refresh').send({ refreshToken: session.refreshToken }).expect(200);
   assert.notEqual(next.body.refreshToken, session.refreshToken);
-  await api.post('/v1/auth/refresh').send({ refreshToken: session.refreshToken }).expect(401);
+  await api.get('/v1/users/me').auth(next.body.accessToken, { type: 'bearer' }).expect(200);
   await api.post('/v1/auth/logout').auth(next.body.accessToken, { type: 'bearer' }).expect(204);
   await api.get('/v1/users/me').auth(next.body.accessToken, { type: 'bearer' }).expect(401);
   await api.post('/v1/auth/refresh').send({ refreshToken: next.body.refreshToken }).expect(401);
@@ -104,4 +105,72 @@ test('Login brute-force attempts are throttled', async t => {
   const { api } = await setup(t);
   for (let i = 0; i < 5; i++) await api.post('/v1/auth/login').send({ email: 'none@example.com', password: 'wrong-password' }).expect(401);
   await api.post('/v1/auth/login').send({ email: 'none@example.com', password: 'wrong-password' }).expect(429);
+});
+
+const bearer = token => ({ type: 'bearer' });
+test('Replaying a rotated refresh token revokes the whole session (stolen-token detection)', async t => {
+  const { api, register } = await setup(t), session = await register();
+  const next = await api.post('/v1/auth/refresh').send({ refreshToken: session.refreshToken }).expect(200);
+  // Attacker (or old copy) replays the previous token: rejected AND the live session is killed.
+  await api.post('/v1/auth/refresh').send({ refreshToken: session.refreshToken }).expect(401);
+  await api.get('/v1/users/me').auth(next.body.accessToken, bearer()).expect(401);
+  await api.post('/v1/auth/refresh').send({ refreshToken: next.body.refreshToken }).expect(401);
+});
+test('Password change verifies the current password, keeps this device and revokes other devices', async t => {
+  const { api, register } = await setup(t), phone = await register();
+  const tablet = (await api.post('/v1/auth/login').send({ email: 'eren@example.com', password: 'a-strong-password' }).expect(200)).body;
+  await api.post('/v1/auth/password').send({ currentPassword: 'a-strong-password', newPassword: 'another-strong-password' }).expect(401);
+  await api.post('/v1/auth/password').auth(phone.accessToken, bearer()).send({ currentPassword: 'wrong-password', newPassword: 'another-strong-password' }).expect(403);
+  await api.post('/v1/auth/password').auth(phone.accessToken, bearer()).send({ currentPassword: 'a-strong-password', newPassword: 'short' }).expect(400);
+  await api.post('/v1/auth/password').auth(phone.accessToken, bearer()).send({ currentPassword: 'a-strong-password', newPassword: 'a-strong-password' }).expect(400);
+  const changed = await api.post('/v1/auth/password').auth(phone.accessToken, bearer()).send({ currentPassword: 'a-strong-password', newPassword: 'another-strong-password' }).expect(200);
+  assert.equal(changed.body.revokedSessions, 1); assert.equal(changed.body.user.password_hash, undefined);
+  await api.get('/v1/users/me').auth(phone.accessToken, bearer()).expect(200);
+  await api.get('/v1/users/me').auth(tablet.accessToken, bearer()).expect(401);
+  await api.post('/v1/auth/refresh').send({ refreshToken: tablet.refreshToken }).expect(401);
+  await api.post('/v1/auth/login').send({ email: 'eren@example.com', password: 'a-strong-password' }).expect(401);
+  await api.post('/v1/auth/login').send({ email: 'eren@example.com', password: 'another-strong-password' }).expect(200);
+});
+test('Google-only accounts cannot change a password they do not have', async t => {
+  const { api, identities } = await setup(t);
+  identities.set('google-only-valid-id-token-xx', { sub: 'g-only', email: 'g@example.com', name: 'G' });
+  const g = (await api.post('/v1/auth/google').send({ idToken: 'google-only-valid-id-token-xx' }).expect(200)).body;
+  await api.post('/v1/auth/password').auth(g.accessToken, bearer()).send({ currentPassword: 'anything', newPassword: 'another-strong-password' }).expect(400);
+});
+test('Logout from all devices revokes every session of only that user', async t => {
+  const { api, register } = await setup(t), a1 = await register(), other = await register('other@example.com');
+  const a2 = (await api.post('/v1/auth/login').send({ email: 'eren@example.com', password: 'a-strong-password' }).expect(200)).body;
+  await api.post('/v1/auth/logout-all').expect(401);
+  await api.post('/v1/auth/logout-all').auth(a1.accessToken, bearer()).expect(204);
+  await api.get('/v1/users/me').auth(a1.accessToken, bearer()).expect(401);
+  await api.get('/v1/users/me').auth(a2.accessToken, bearer()).expect(401);
+  await api.post('/v1/auth/refresh').send({ refreshToken: a2.refreshToken }).expect(401);
+  await api.get('/v1/users/me').auth(other.accessToken, bearer()).expect(200);
+});
+test('Expired sessions are pruned on the next login', async t => {
+  const { api, pool, register } = await setup(t), first = await register();
+  await pool.query("UPDATE sessions SET expires_at = now() - interval '1 day'");
+  await api.get('/v1/users/me').auth(first.accessToken, bearer()).expect(401);
+  await api.post('/v1/auth/login').send({ email: 'eren@example.com', password: 'a-strong-password' }).expect(200);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sessions')).rows[0].n, 1);
+});
+test('Display names reject control characters and Google names are sanitised', async t => {
+  const { api, register } = await setup(t), s = await register();
+  await api.patch('/v1/users/me').auth(s.accessToken, bearer()).send({ displayName: 'Eren\u001b[31m' }).expect(400);
+  await api.post('/v1/auth/register').send({ email: 'x@example.com', displayName: 'Bad\nName', password: 'a-strong-password' }).expect(400);
+  const { googleName } = require('../dist/google');
+  assert.equal(googleName('Ayşe\u0000 Yılmaz'), 'Ayşe Yılmaz');
+  assert.equal(googleName('A'), 'Taze Kal kullanıcısı');
+  assert.equal(googleName(undefined), 'Taze Kal kullanıcısı');
+});
+test('TRUST_PROXY parsing refuses the spoofable "true" setting', () => {
+  const { parseTrustProxy } = require('../dist/config');
+  assert.equal(parseTrustProxy(undefined), false); assert.equal(parseTrustProxy('0'), false);
+  assert.equal(parseTrustProxy('1'), 1); assert.deepEqual(parseTrustProxy('loopback, 10.0.0.0/8'), ['loopback', '10.0.0.0/8']);
+  assert.throws(() => parseTrustProxy('true'));
+});
+test('Malformed refresh token ids are rejected as 401, not a database error', async t => {
+  const { api } = await setup(t);
+  await api.post('/v1/auth/refresh').send({ refreshToken: '-'.repeat(36) + '.' + 'x'.repeat(20) }).expect(401);
+  await api.post('/v1/auth/refresh').send({ refreshToken: randomUUID() + '.' + 'x'.repeat(20) }).expect(401);
 });

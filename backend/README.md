@@ -28,7 +28,7 @@ API `http://localhost:3000/v1` adresinde çalışır. Android emülatörü aynı
 
 `npm run dev` terminali açık kaldığı sürece API çalışır; terminal kapanırsa bu adres de kapanır. Yeniden açarken yalnız `docker compose up -d db` ve `npm run dev` yeterlidir; `.env` dosyasını yeniden kopyalamayın. Docker Desktop'taki `backend` grubu şu an yalnız veritabanını içerir, Node API'yi başlatmaz.
 
-Üretimde `npm run build` ve `npm start`; HTTPS reverse proxy, güvenilir origin listesi ve özel PostgreSQL bağlantısı gerekir. Proxy arkasında istemci IP yapılandırması ayrıca yapılmalı. Şu anki deneme sınırı süreç belleğindedir; birden fazla API örneğine geçerken ortak rate-limit deposu gerekir. Gizli bilgiler dağıtım ortamından verilir.
+Üretimde `npm run build` ve `npm start`; HTTPS reverse proxy, güvenilir origin listesi ve özel PostgreSQL bağlantısı gerekir. Proxy arkasında `TRUST_PROXY` ayarlanmalıdır (aynı makinedeki proxy için `loopback`, tek ara katman için `1`); aksi halde tüm istekler proxy IP'sini paylaşır ve giriş deneme sınırı herkes için ortak dolar. `TRUST_PROXY=true` güvensiz olduğu için reddedilir. Şu anki deneme sınırı süreç belleğindedir; birden fazla API örneğine geçerken ortak rate-limit deposu gerekir. Gizli bilgiler dağıtım ortamından verilir.
 
 ## HTTP sözleşmesi
 
@@ -42,6 +42,8 @@ Tüm gövdeler JSON. Korumalı çağrılarda `Authorization: Bearer <accessToken
 | POST `/auth/refresh` | `refreshToken` | Yenilenmiş iki token + profil |
 | POST `/auth/logout` | — | Mevcut oturum iptal, 204 |
 | POST `/auth/google/link` | `idToken` | Giriş yapılan profile aynı e-postalı Google hesabını bağlar |
+| POST `/auth/password` | `currentPassword`, `newPassword` | Şifreyi değiştirir; bu cihaz dışındaki tüm oturumları kapatır. Yanlış mevcut şifre 403, Google-only hesap 400 |
+| POST `/auth/logout-all` | — | Kullanıcının bütün oturumlarını (bu cihaz dahil) iptal eder, 204 |
 | GET `/users/me` | — | Kendi profilin |
 | PATCH `/users/me` | `displayName` | Güncel profil |
 | POST `/products/sync` | `mutations` | Onaylar ve sürüm çakışmaları |
@@ -51,9 +53,9 @@ Tüm gövdeler JSON. Korumalı çağrılarda `Authorization: Bearer <accessToken
 
 Ürün tarihi isteğe bağlıdır (`expires_at=null`). Yeni ürünlerde `expiry_source` (`label`, `estimated`, `unknown`) ve isteğe bağlı `shelf_life_profile_id` tahminin kaynağını korur. Eski istemcilerin metadata içermeyen tarihli ürünleri ve mutation tekrarları desteklenir. Alanlar JSON ürün gövdesinde tutulduğundan API PostgreSQL şema sürümü v2 olarak kalır.
 
-Access token 15 dakika; refresh token 30 günlük mutlak oturum ömrü içinde döndürülür. Yenileme ömrü her kullanımda sınırsız uzatılmaz. Eski refresh token yeniden kullanılamaz. Çıkış sunucuda oturumu iptal ettiği için mevcut access token da geçersizleşir. Sunucu oturumunun iptalini doğrulamak için API erişimi gerekir. Mobilde bağlantı yokken ayrı onayla yalnız cihaz oturumu kaldırılabilir; bu işlem sunucudaki oturumu iptal etmez. [Mobil bağlantı ve çıkış davranışı](../docs/OFFLINE.md).
+Access token 15 dakika; refresh token 30 günlük mutlak oturum ömrü içinde döndürülür. Yenileme ömrü her kullanımda sınırsız uzatılmaz. Eski refresh token yeniden kullanılamaz; kullanılmış bir refresh token tekrar gönderilirse çalınma ihtimaline karşı o oturum tamamen iptal edilir ve kullanıcı yeniden giriş yapar. Süresi dolan oturumlar bir sonraki girişte veritabanından silinir. Çıkış sunucuda oturumu iptal ettiği için mevcut access token da geçersizleşir. Sunucu oturumunun iptalini doğrulamak için API erişimi gerekir. Mobilde bağlantı yokken ayrı onayla yalnız cihaz oturumu kaldırılabilir; bu işlem sunucudaki oturumu iptal etmez. [Mobil bağlantı ve çıkış davranışı](../docs/OFFLINE.md).
 
-Şifreler scrypt (N=32768, r=8, p=3), ayrı rastgele salt ve 64 bayt çıktı ile hash'lenir. Refresh token'ın yalnız SHA-256 özeti tutulur. Kullanıcı girdileri allowlist ile doğrulanır; profil sahibini gövdeden değil doğrulanmış oturumdan alır. SQL sorguları parametrelidir. Yanıtlara şifre hash'i veya Google subject eklenmez.
+Şifreler scrypt (N=32768, r=8, p=3), ayrı rastgele salt ve 64 bayt çıktı ile hash'lenir. Refresh token'ın yalnız SHA-256 özeti tutulur. Kullanıcı girdileri allowlist ile doğrulanır; profil sahibini gövdeden değil doğrulanmış oturumdan alır. SQL sorguları parametrelidir. Yanıtlara şifre hash'i veya Google subject eklenmez. Görünen ad ve ürün ad/miktar alanlarında kontrol karakterleri (satır sonu, NUL, ESC) reddedilir. Bir hesap en fazla 20.000 ürün satırı (silinmiş kayıt izleri dahil) saklayabilir; sınırı aşan eşitleme paketi 413 ile bütünüyle reddedilir.
 
 ## Google
 
