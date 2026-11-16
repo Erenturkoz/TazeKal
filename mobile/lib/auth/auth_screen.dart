@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 import 'auth_api.dart';
 import 'auth_controller.dart';
 import '../widgets/connection_status.dart';
@@ -60,7 +61,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('taze kal')),
+      appBar: AppBar(title: const Text('Taze Kal')),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -79,7 +80,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: BorderRadius.circular(TazeRadius.lg),
                           ),
                           child: Icon(
                             Icons.eco_outlined,

@@ -115,17 +115,39 @@ void main() {
       addTearDown(
         tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
       );
+      // Dolu mutfak: özet, depolama sekmeleri ve ürün kartları büyük metinde.
+      final repo = MemoryRepository(), today = calendarDay(DateTime.now());
+      for (final (name, location, days) in [
+        ('Günlük süt', 'Buzdolabı', 1),
+        ('Pirinç', 'Kiler', 200),
+        ('Bezelye', 'Dondurucu', 120),
+      ]) {
+        await repo.save(
+          Product(
+            id: name,
+            name: name,
+            quantity: '1 adet',
+            location: location,
+            purchasedAt: today,
+            expiresAt: addCalendarDays(today, days),
+          ),
+        );
+      }
       await tester.pumpWidget(
-        TazeKalApp(
-          repository: MemoryRepository(),
-          notifications: FakeNotifications(),
-        ),
+        TazeKalApp(repository: repo, notifications: FakeNotifications()),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.text('Bezelye'),
+        250,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(
         find.text('Dondurucu'),
-        250,
+        -250,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
@@ -146,7 +168,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Mutfağın,\nkontrol altında.'), findsOneWidget);
+      expect(find.text('Mutfağın şimdilik boş.'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

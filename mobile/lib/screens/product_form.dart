@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 import 'package:flutter/services.dart';
 import '../domain/product.dart';
 import '../domain/opening_profile.dart';
@@ -412,16 +413,18 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
     ],
   );
 
-  Widget section(String title, String subtitle, List<Widget> children) =>
+  Widget section(String title, String? subtitle, List<Widget> children) =>
       Padding(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: const EdgeInsets.only(bottom: TazeSpace.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(subtitle),
-            const SizedBox(height: 16),
+            if (subtitle != null) ...[
+              const SizedBox(height: TazeSpace.xs),
+              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            ],
+            const SizedBox(height: TazeSpace.md),
             ...children,
           ],
         ),
@@ -429,7 +432,7 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
 
   Widget dateTile(String label, String value, String which, {String? error}) =>
       Card(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: TazeSpace.sm),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -469,7 +472,12 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+            padding: const EdgeInsets.fromLTRB(
+              TazeSpace.page,
+              TazeSpace.md,
+              TazeSpace.page,
+              TazeSpace.lg,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,7 +510,12 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
                 child: SingleChildScrollView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(
+                    TazeSpace.page,
+                    TazeSpace.sm,
+                    TazeSpace.page,
+                    TazeSpace.xl,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -534,43 +547,12 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
                         const SizedBox(height: 24),
                       ],
                       if (!widget.markOpened) ...[
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: scheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                Icons.kitchen_outlined,
-                                color: scheme.onPrimaryContainer,
-                                size: 32,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                widget.product == null
-                                    ? 'Mutfağına ekle.'
-                                    : 'Bilgileri güncelle.',
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(
-                                      color: scheme.onPrimaryContainer,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Bildiğin kadarını ekle. Tarih yoksa uygun ürünler için tahmin önerelim.',
-                                style: TextStyle(
-                                  color: scheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ],
-                          ),
+                        Text(
+                          'Bildiğin kadarını gir. Tarih yoksa uygun ürünler için tahmin öneririz.',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 24),
-                        section('Ürün bilgileri', 'Ne aldın, ne kadar aldın?', [
+                        const SizedBox(height: TazeSpace.xl),
+                        section('Ürün bilgileri', null, [
                           TextFormField(
                             controller: name,
                             maxLength: 100,
@@ -592,35 +574,31 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
                             ),
                           ),
                         ]),
-                        section(
-                          'Nerede saklayacaksın?',
-                          'Her ürün doğru rafta.',
-                          [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final entry in {
-                                  'Buzdolabı': Icons.kitchen_outlined,
-                                  'Kiler': Icons.shelves,
-                                  'Dondurucu': Icons.ac_unit_rounded,
-                                }.entries)
-                                  ChoiceChip(
-                                    showCheckmark: false,
-                                    label: Text(entry.key),
-                                    avatar: Icon(entry.value, size: 18),
-                                    selected: location == entry.key,
-                                    onSelected: (_) => change(() {
-                                      if (location != entry.key) {
-                                        coldStorageConfirmed = false;
-                                      }
-                                      location = entry.key;
-                                    }),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
+                        section('Nerede saklayacaksın?', null, [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final entry in {
+                                'Buzdolabı': Icons.kitchen_outlined,
+                                'Kiler': Icons.shelves,
+                                'Dondurucu': Icons.ac_unit_rounded,
+                              }.entries)
+                                ChoiceChip(
+                                  showCheckmark: false,
+                                  label: Text(entry.key),
+                                  avatar: Icon(entry.value, size: 18),
+                                  selected: location == entry.key,
+                                  onSelected: (_) => change(() {
+                                    if (location != entry.key) {
+                                      coldStorageConfirmed = false;
+                                    }
+                                    location = entry.key;
+                                  }),
+                                ),
+                            ],
+                          ),
+                        ]),
                         section(
                           'Tarihleri belirle',
                           'İsteğe bağlı. Ambalajdaki tarih her zaman önceliklidir.',
@@ -684,10 +662,12 @@ class _ProductFormState extends State<ProductForm> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 12),
                               Container(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(TazeSpace.lg),
                                 decoration: BoxDecoration(
                                   color: scheme.surfaceContainerLow,
-                                  borderRadius: BorderRadius.circular(18),
+                                  borderRadius: BorderRadius.circular(
+                                    TazeRadius.md,
+                                  ),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,

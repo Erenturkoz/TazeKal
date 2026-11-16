@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 
 bool reducedMotion(BuildContext context) =>
     MediaQuery.disableAnimationsOf(context) ||
@@ -108,38 +109,32 @@ class _KitchenSkeletonState extends State<KitchenSkeleton>
             borderRadius: BorderRadius.circular(radius),
           ),
         );
+    // Ana ekranın iskeleti: özet kartı, depolama sekmeleri, arama ve ürünler.
     final content = ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(
+        TazeSpace.page,
+        TazeSpace.page,
+        TazeSpace.page,
+        TazeSpace.xl,
+      ),
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: block(12, width: 110, radius: 6),
-        ),
-        const SizedBox(height: 20),
-        block(32),
-        const SizedBox(height: 8),
-        Align(alignment: Alignment.centerLeft, child: block(32, width: 210)),
-        const SizedBox(height: 16),
-        block(14),
-        const SizedBox(height: 28),
+        block(86, radius: TazeRadius.lg),
+        const SizedBox(height: TazeSpace.xl),
         Row(
           children: [
-            for (var i = 0; i < 3; i++) ...[
-              if (i != 0) const SizedBox(width: 12),
-              Expanded(child: block(94, radius: 22)),
+            for (var i = 0; i < 4; i++) ...[
+              if (i != 0) const SizedBox(width: TazeSpace.sm),
+              Expanded(child: block(56, radius: TazeRadius.md)),
             ],
           ],
         ),
-        const SizedBox(height: 28),
-        block(22),
-        const SizedBox(height: 16),
-        block(88, radius: 22),
-        const SizedBox(height: 20),
-        block(52),
-        const SizedBox(height: 24),
-        block(132, radius: 22),
-        const SizedBox(height: 16),
-        block(132, radius: 22),
+        const SizedBox(height: TazeSpace.md),
+        block(48, radius: TazeRadius.md),
+        const SizedBox(height: TazeSpace.xl),
+        for (var i = 0; i < 3; i++) ...[
+          block(124, radius: TazeRadius.lg),
+          const SizedBox(height: TazeSpace.md),
+        ],
       ],
     );
     return Semantics(
@@ -165,7 +160,7 @@ class StartupSkeleton extends StatelessWidget {
   const StartupSkeleton({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('taze kal')),
+    appBar: AppBar(title: const Text('Taze Kal')),
     body: const SafeArea(top: false, child: KitchenSkeleton()),
   );
 }

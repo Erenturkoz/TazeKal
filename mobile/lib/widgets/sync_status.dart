@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 import '../data/product_repository.dart';
 import '../data/sync_models.dart';
 import '../domain/product.dart';
@@ -84,7 +85,7 @@ class SyncStatus extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(TazeRadius.md),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

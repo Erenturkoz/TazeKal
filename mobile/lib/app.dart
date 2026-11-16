@@ -13,6 +13,7 @@ import 'services/receipt_scanner.dart';
 import 'widgets/connection_status.dart';
 import 'services/product_sync.dart';
 import 'widgets/sync_status.dart';
+import 'widgets/status_message.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,23 +37,17 @@ Future<void> main() async {
   } catch (_) {
     runApp(
       MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Veritabanı açılamadı. Uygulamayı yeniden başlatmayı dene.',
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: main,
-                    child: const Text('Tekrar dene'),
-                  ),
-                ],
-              ),
+        debugShowCheckedModeBanner: false,
+        theme: TazeTheme.create(Brightness.light),
+        darkTheme: TazeTheme.create(Brightness.dark),
+        home: const Scaffold(
+          body: SafeArea(
+            child: StatusMessage(
+              icon: Icons.storage_rounded,
+              title: 'Veritabanı açılamadı',
+              message: 'Uygulamayı kapatıp yeniden açmayı dene.',
+              actionLabel: 'Tekrar dene',
+              onAction: main,
             ),
           ),
         ),

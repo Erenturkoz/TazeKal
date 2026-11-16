@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 import '../auth/auth_api.dart';
 import '../auth/auth_controller.dart';
 import 'loading_skeleton.dart';
@@ -122,7 +123,7 @@ class ConnectionBanner extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
                     decoration: BoxDecoration(
                       color: scheme.secondaryContainer,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(TazeRadius.md),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

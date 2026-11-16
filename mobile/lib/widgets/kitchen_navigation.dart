@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../design/taze_theme.dart';
 
 /// Keeps the primary action within the navigation area, clear of stock cards.
 class KitchenNavigation extends StatelessWidget {
@@ -22,11 +23,9 @@ class KitchenNavigation extends StatelessWidget {
     final scheme = theme.colorScheme;
     return Material(
       color: theme.navigationBarTheme.backgroundColor ?? scheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: .45)),
+      shape: Border(
+        top: BorderSide(color: scheme.outlineVariant.withValues(alpha: .6)),
       ),
-      clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
         child: Center(
@@ -72,7 +71,12 @@ class KitchenNavigation extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                        padding: const EdgeInsets.fromLTRB(
+                          TazeSpace.page,
+                          TazeSpace.md,
+                          TazeSpace.page,
+                          TazeSpace.xs,
+                        ),
                         child: SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
@@ -90,10 +94,15 @@ class KitchenNavigation extends StatelessWidget {
                   children: [
                     Expanded(child: navigation),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+                      padding: const EdgeInsets.fromLTRB(
+                        TazeSpace.xs,
+                        TazeSpace.sm,
+                        TazeSpace.md,
+                        TazeSpace.sm,
+                      ),
                       child: SizedBox(
-                        width: 80,
-                        height: 68,
+                        width: 84,
+                        height: 56,
                         child: FilledButton(
                           onPressed: busy ? null : onAdd,
                           style: FilledButton.styleFrom(
@@ -102,15 +111,17 @@ class KitchenNavigation extends StatelessWidget {
                               vertical: 4,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(
+                                TazeRadius.lg,
+                              ),
                             ),
                           ),
                           child: const Column(
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_rounded, size: 24),
-                              SizedBox(height: 2),
+                              Icon(Icons.add_rounded, size: 22),
+                              SizedBox(height: 1),
                               Text(
                                 'Ürün ekle',
                                 maxLines: 1,
